@@ -1,7 +1,9 @@
 # Combined Image- and World-Space Tracking in Traffic Scenes
 
 This repository contains code for the tracking system as described in
-**Aljosa Osep, Wolfgang Mehner, Markus Mathias, Bastian Leibe. Combined Image- and World-Space Tracking in Traffic Scenes. ICRA 2017. (https://www.vision.rwth-aachen.de/media/papers/paper_final_compressed.pdf)**
+**Combined Image- and World-Space Tracking in Traffic Scenes. ICRA 2017. (https://www.vision.rwth-aachen.de/media/papers/paper_final_compressed.pdf)**
+
+By Aljosa Osep, Wolfgang Mehner, Markus Mathias, Bastian Leibe at Computer Vision Group, RWTH Aachen University
 
 ## Demo  Video
 TODO
@@ -26,6 +28,7 @@ In order to run the code, your setup has to meet the following minimum requireme
 ### Running the tracker
 0.  Edit the config `%PROJ_DIR%/data/kitti_sample.cfg`, set all the paths.
 0.  Run the tracker eg. `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d`
+0.  Find a small sample of KITTI tracking dataset in `%PROJ_DIR%/data/kitti_sample` (left/right camera images, Regionlets detections, calibration files).
 
 ## Citing
 
@@ -50,8 +53,8 @@ If you find the tracker useful in your research, please consider citing:
 
 * External libraries
     * Tracker ships the following external modules:
-        * *libelas* - disparity estimation (http://www.cvlibs.net/software/libelas/)
-        * *libviso2* - egomotion estimation (http://www.cvlibs.net/software/libviso/)
+        * **libelas** - disparity estimation (http://www.cvlibs.net/software/libelas/)
+        * **libviso2** - egomotion estimation (http://www.cvlibs.net/software/libviso/)
 
 * Etc
     * Tracker does not ship scene-flow estimator.
