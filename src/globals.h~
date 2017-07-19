@@ -1,0 +1,64 @@
+#ifndef GOT_GLOBALS_H
+#define GOT_GLOBALS_H
+
+#include <string>
+
+namespace GOT {
+namespace globals {
+
+const int g_fps = 10; // See http://www.cvlibs.net/datasets/kitti/setup.php
+const double g_far_plane = 60;
+const double g_near_plane = 0.01;
+
+// ADH Tracker
+namespace adh_object_tracker {
+const double g_motion_model_threshold = 0.4;
+const double g_color_histogram_threshold = 0.6;
+}
+
+namespace detection_object_tracker {
+const double g_lsvm_detection_score_threshold=0.0;
+const double g_motion_model_threshold = 0.3;
+const double g_color_histogram_threshold = 0.6;
+}
+
+// Object proposals
+namespace object_proposal {
+const double g_object_min_height = 0.6; //1.0; //0.6;
+const double g_object_max_height = 2.3;
+const double g_object_max_width = 100;
+const double g_object_max_depth = 100;
+const int g_min_num_points = 200; // 200 for dense!
+}
+
+// Ground histogram physical extent and discretization
+namespace ground_histogram {
+const double g_length = 40.0;
+const double g_depth = 60.0;
+const double g_height = 3.0;
+const int g_rows = 1200;
+const int g_cols = 800; 
+}
+
+// Multi-Scale QuickShift Seqmentation
+namespace multi_scale_quickshift {
+const double g_sigma_start = 1.0;
+const double g_sigma_step = 0.5;
+const double g_num_iter = 20;
+const int patch_size_threshold = 100;
+const double scale_persist_IOU_threshold = 0.8;
+}
+
+namespace tracking {
+const int g_temporal_window_size = 10; //10;
+}
+
+//namespace paths {
+//const std::string tmp_dir_path = "";
+//}
+
+}
+}
+
+
+#endif // GOT_GLOBALS_H

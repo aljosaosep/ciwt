@@ -1,0 +1,1122 @@
+
+#include <boost/make_shared.hpp>
+
+// std
+#include <cmath>
+
+// cv
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+
+
+#include "trackers/multi_cue_object_tracker.h"
+
+// Eigen
+#include <Eigen/Geometry>
+
+// Tracking
+#include <tracking/qpbo.h>
+#include <tracking/utils_tracking.h>
+#include <tracking/hypothesis_inlier.h>
+#include <unordered_map>
+
+// Utils
+#include "utils_geometry.h"
+#include "utils_visualization.h"
+#include "utils_math.h"
+#include "ground_model.h"
+
+// Project
+#include "globals.h"
+
+
+namespace GOT {
+    namespace tracking {
+        namespace object {
+
+            namespace multi_cue_tracker {
+
+
+                void UpdateHypohtesisLatent(const Observation &obs, Hypothesis &hypo);
+
+                auto ReparametrizeBoundingBoxCenterToTopPoint = [](const Eigen::Vector4d &bbox_in)->Eigen::Vector4d {
+                    auto cx = bbox_in[0];
+                    auto cy = bbox_in[1];
+                    auto w = bbox_in[2];
+                    auto h = bbox_in[3];
+                    return Eigen::Vector4d( cx-(w/2.0),cy-(h/2.0), w,h);
+                };
+
+//! ========================================================================================================================
+//!                                 DetectionObjectTracker Implementation
+//! ========================================================================================================================
+                MultiCueObjectTracker::MultiCueObjectTracker(const Parameters &params) : MDL::MDLObjectTracker(
+                        params) {
+                    // TODO (Aljosa) this is a hack, params should be transferred when calling MultiHypothesisObjectTrackerAbstract::ctor! Why are they not?
+                    this->parameters_ = params;
+
+                    kalman_filter_handler_ = std::unique_ptr<KalmanFilterHandlerConstVelocity>(new KalmanFilterHandlerConstVelocity(params.dt_));
+                }
+
+                void PrintHyposStates(const std::vector<GOT::tracking::object::Hypothesis> &hypos, char *message) {
+                    printf("==========================\n %s \n============================\n", message);
+                    for (const auto &hypo:hypos) {
+
+                        if (hypo.id()<0)
+                            continue;
+
+                        printf("Hypo: %02d, score: %1.2f, inliers: ", hypo.id(), hypo.score());
+
+                        // Short version
+                        for (const auto &inlier:hypo.inliers()) {
+                            printf("(T%d, %d),", inlier.timestamps().back(), inlier.indices().back());
+
+
+                        }
+
+                        // Long version
+                        for (const auto &inlier:hypo.inliers()) {
+                            printf("(T%d, I%d; [%1.2f | ", inlier.timestamps().back(), inlier.indices().back(), inlier.association_scores().back());
+
+                            for (const auto assoc_dbg_val:inlier.assoc_data_) {
+                                printf("%1.2f ", assoc_dbg_val);
+                            }
+
+                            printf("])");
+                        }
+
+
+
+                        printf("\n");
+                    }
+                    printf("=====================================================================================\n\n");
+                }
+
+                void PrintHyposKalmanStates(const std::vector<GOT::tracking::object::Hypothesis> &hypos, char *message) {
+                    printf("==========================\n %s \n============================\n", message);
+                    for (const auto &hypo:hypos) {
+                        if (hypo.id()>-1) {
+                            printf("Hypo: %02d, score: %1.2f\n", hypo.id(), hypo.score());
+                            std::cout << "Measurement: " << hypo.kalman_filter_const()->measurements().back().transpose() <<
+                            std::endl;
+                            std::cout << "Prediction: " << hypo.kalman_filter_const()->state_predictions().back().transpose() <<
+                            std::endl;
+                            std::cout << "Correction: " << hypo.kalman_filter_const()->state_corrections().back().transpose() <<
+                            std::endl;
+                            printf("\n");
+                        }
+                    }
+                    printf("=====================================================================================\n\n");
+                }
+
+
+                std::vector<Hypothesis> MultiCueObjectTracker::RemoveDuplicates(int current_frame, const std::vector<Hypothesis> &hypotheses, Detections::ConstPtr detections) {
+
+                    std::vector<int> duplicates_indicator_vector(hypotheses.size(), 0);
+
+                    for (int i=0; i<hypotheses.size(); i++) {
+                        if (duplicates_indicator_vector.at(i)==0) {
+                            for (int j=i+1; j<hypotheses.size(); j++) {
+                                const auto &h1 = hypotheses.at(i);
+                                const auto &h2 = hypotheses.at(j);
+                                auto intersected_inliers = this->intersect_inliers_(h1, h2, detections, this->parameters_, current_frame);
+
+                                int T=10;
+                                if (h1.inliers().size()<T || h2.inliers().size()<T)
+                                    continue;
+
+                                // If last T inliers differ, don't consider this as a duplicate
+                                bool hypos_differ_in_last_frames = false;
+                                for (int k=1; k<=T; k++) {
+                                    auto last_inlier_h1 = h1.inliers().at(h1.inliers().size()-k);
+                                    auto last_inlier_h2 = h2.inliers().at(h2.inliers().size()-k);
+                                    int last_inlier_h1_timestamp = last_inlier_h1.timestamps().back();
+                                    int last_inlier_h2_timestamp = last_inlier_h2.timestamps().back();
+
+                                    //const auto motion_type_h1 = h1.frame_to_motion_type_map().at(last_inlier_h1_timestamp);
+                                    //const auto motion_type_h2 = h2.frame_to_motion_type_map().at(last_inlier_h2_timestamp);
+
+                                    if (!((last_inlier_h1_timestamp == last_inlier_h2_timestamp) &&
+                                          (last_inlier_h1.indices().back() == last_inlier_h2.indices().back()))) {
+
+                                        hypos_differ_in_last_frames = true;
+
+                                    }
+                                }
+
+                                if (hypos_differ_in_last_frames)
+                                    continue;
+
+                                // Intersect condition
+                                const double mult = 0.95;
+                                if ( (( (static_cast<double>(h1.inliers().size())*mult < intersected_inliers.size()) ) ||
+                                      ( (static_cast<double>(h2.inliers().size())*mult < intersected_inliers.size()) )) ) {
+                                    int weaker_idx = (h1.score() < h2.score()) ? i : j;
+
+//                                    // ============= Inherit id? =========
+//                                    if (hypotheses.at(weaker_idx).id()>=0) {
+//
+//                                    }
+//                                    // ===================================
+
+                                    duplicates_indicator_vector.at(weaker_idx) = 1;
+                                }
+                                // YES:
+                                // - see which one has better score
+                                // - set duplicate indicator
+                                //if (inliers_h1)
+                                // YES -> terminate one (weaker one)
+                            }
+                        }
+                    }
+
+                    // Copy to a new set only hypos, not marked as duplicates!
+                    std::vector<Hypothesis> non_duplis;
+                    std::vector<Hypothesis> duplis;
+                    for (int i=0; i<duplicates_indicator_vector.size(); i++) {
+                        if (duplicates_indicator_vector.at(i)==0)
+                            non_duplis.push_back(hypotheses.at(i));
+                        else
+                            duplis.push_back(hypotheses.at(i));
+                    }
+
+                    // Stats
+                    const int num_dupli_removed = hypotheses.size()-non_duplis.size();
+                    //std::cout << "\033[1;31m REMOVED \033[0m" << num_dupli_removed << " duplicate hypos. " << std::endl;
+                    printf ("\n REMOVED %d duplicate hypos: ", num_dupli_removed);
+
+                    printf("(");
+                    for (const auto &dupli:duplis)
+                        printf("%d, ", dupli.id());
+                    printf(")");
+
+
+                    return non_duplis;
+                }
+
+                void MultiCueObjectTracker::ProcessFrame(Detections::ConstPtr detections, int current_frame) {
+
+                    printf ("\n Tracking: ProcessFrame %d \n");
+
+                    //! Access camera from past frame to current
+                    bool lookup_success = false;
+                    auto camera = detections->GetCamera(current_frame, lookup_success);
+
+                    //PrintHyposStates(hypotheses_, "Before growing hypos:");
+
+                    //! Extend existing hypotheses
+                    HypothesesVector extended_hypos;
+                    if (hypotheses_.size()>0)
+                        extended_hypos = ExtendHypotheses(detections, current_frame);
+                    //std::cout << "\33[36;40;1m" << " Extended " << extended_hypos.size() << " hypotheses." <<
+                    //"\33[0m"; // std::endl;
+
+                    printf("\n->Extended %d hypotheses:", extended_hypos.size()); // std::endl;
+
+                    // TODO: see if two hypotheses used same det. for extention.
+                    // If they did, for both add two new, purely-extrapol. hypos.
+                    // Don't forget to set the parent id!
+
+                    // Print-out id's of the extended
+                    std::cout << "(";
+                    for (const auto &hypo:extended_hypos) {
+
+                        if (hypo.inliers().back().timestamps().back()!=current_frame)
+                            continue;
+
+                        std::cout << hypo.id() << ", ";
+                    }
+                    std::cout << ") " << std::endl << std::endl;
+
+                    this->hypotheses_.clear();
+                    this->hypotheses_.insert(hypotheses_.end(), extended_hypos.begin(), extended_hypos.end());
+
+
+                    //! From detections, that were not used for extending hypotheses, start new hypotheses
+                    auto new_hypos = StartNewHypotheses(detections, current_frame);
+
+
+                    //std::cout << "\33[36;40;1m" << " Created " << new_hypos.size() << " new hypotheses." << "\33[0m" <<
+                    //std::endl << std::endl;
+
+                    printf("\n->Created %d hypotheses.\n", new_hypos.size()); // std::endl;
+
+
+                    this->hypotheses_.insert(hypotheses_.end(), new_hypos.begin(), new_hypos.end());
+
+
+                    //PrintHyposStates(hypotheses_, "After hypothesis handling:");
+
+
+                    // Compute distance of prediction to exit-zones
+                    for (auto &hypo:hypotheses_) {
+                        // Kalman filter: gimme prediction!
+                        const auto &hypo_kf = hypo.kalman_filter_const();
+
+                        Eigen::VectorXd kf_prediction = hypo_kf->A() * hypo_kf->x(); // Linear*x_; // Linear
+                        //Eigen::Vector2d kf_prediction_pose_on_ground_plane = kf_prediction.head<2>();
+                        Eigen::Vector4d predicted_pose(kf_prediction[0], hypo.poses().back()[1] ,kf_prediction[1], 1.0);
+                        predicted_pose.head<3>() = camera.ground_model()->ProjectPointToGround(predicted_pose.head<3>());
+
+                        // Given prediction, compute distance to all exit zones. Give nearest!
+                        // . . .
+
+                        double dist_to_closest = this->ComputeDistanceToExitZones(predicted_pose, camera);
+                        hypo.distance_prediction_from_exit_zone_ = dist_to_closest;
+
+                        // Is 2d bbox touching image borders?
+                        Eigen::Vector4d bounding_box_2d = hypo.bounding_boxes_2d().back();
+                        const int bbox_x1 = bounding_box_2d[0];
+                        const int bbox_y1 = bounding_box_2d[1];
+                        const int bbox_x2 = bounding_box_2d[0]+bounding_box_2d[2];
+                        const int bbox_y2 = bounding_box_2d[1]+bounding_box_2d[3];
+
+                        int dist_bottom = camera.height()-bbox_y2;
+                        int dist_left = bbox_x1;
+                        int dist_right = camera.width()-bbox_x2;
+
+                        hypo.distance_pix_image_bottom_border_ = dist_bottom;
+                        hypo.distance_pix_image_side_borders_ = std::min(dist_left, dist_right);
+                    }
+
+                    //! Terminate hypos that were not supported by detections for too long
+                    for (auto &hypo:hypotheses_) {
+                        const int max_hole_size = this->parameters_.accepted_frames_without_inlier_;//10; //2;//2; //this->parameters_.accepted_frames_without_inlier_;
+                        const int last_detection_frame = hypo.inliers().back().timestamps().back();//hypo.timestamps().back();
+
+                        if (std::abs(current_frame - last_detection_frame) > max_hole_size) {
+                            std::cout << "Hypo " << hypo.id() << " received no detections for " << max_hole_size <<
+                            " frames, terminated." << std::endl << std::endl;
+                            hypo.set_terminated(true);
+                        }
+
+                        // Exit zones
+                        //const double t_dist_for_termination = 0.0;
+                        //if (hypo.is_about_to_leave_the_frustum() && hypo.distance_prediction_from_exit_zone_ < t_dist_for_termination) {
+                        //    hypo.set_terminated(true);
+                        //    printf ("Hypo %d terminated (leaving, dist_prediciton_from_exit_zone=%1.2f\n", hypo.id(), hypo.distance_prediction_from_exit_zone_);
+                        //}
+                    }
+
+                    this->CheckExitZones(camera);
+
+
+                    // Compute unaries (diagonal elements)
+                    this->ComputeUnaryScoresMDL(detections, current_frame, hypotheses_);
+
+                    // Remove duplicate hypos
+                    hypotheses_ = this->RemoveDuplicates(current_frame, hypotheses_, detections);
+
+                    //PrintHyposKalmanStates(hypotheses_, "KALMAN:");
+
+
+                    //! Do CRF inference
+                    Eigen::MatrixXd Q = this->BuildMDLCostMatrix(hypotheses_, detections, current_frame);
+                    Eigen::VectorXi m;
+                    QPBO::SolveExactly(Q, m);
+                    //QPBO::SolveGreedy(Q, m);
+
+
+                    /****************************************
+                     ID HANDLING
+                    ****************************************/
+                    printf("\nID handling ...\n");
+                    // Let's cache indices of currently selected hypos. These should not be re-assigned.
+                    std::set<int> dont_reassign_these_hypo_ids;
+                    for (int i = 0; i < m.size(); i++) {
+                        int is_hypo_selected = m[i];
+                        int id = hypotheses_.at(i).id();
+                        if (static_cast<bool>(is_hypo_selected) && (id > -1))
+                            dont_reassign_these_hypo_ids.insert(id);
+                    }
+
+                    for (int i = 0; i < m.size(); i++) {
+                        int is_hypo_selected = m[i];
+                        if (is_hypo_selected) { // Only assign id's to selected.
+                            Hypothesis &hypo = hypotheses_.at(i);
+                            if (hypo.id() >= 0) {
+                                // Trivial case... only update the stack.
+                                for (auto &hypo_in_stack:this->hypo_stack_) {
+                                    if (hypo_in_stack.id() == hypo.id()) {
+                                        hypo_in_stack = hypo;
+                                    }
+                                }
+                            }
+                            else {// Uh-oh, hypo has no id... see if we find a match in active hypos stack!
+                                int num_intersect_best = 0;
+                                int hypo_id_new = -1;
+                                int index_best = -1;
+                                //for (auto &hypo_in_stack:this->hypo_stack_) {
+                                for (int stack_index = 0; stack_index < hypo_stack_.size(); stack_index++) {
+                                    auto &hypo_in_stack = this->hypo_stack_.at(stack_index);
+                                    // Check if we can re-assign this hypo in stack.
+
+
+                                if ((dont_reassign_these_hypo_ids.size() > 0) &&
+                                        (dont_reassign_these_hypo_ids.count(hypo_in_stack.id()) > 0))
+                                    continue;
+//
+//                    if (hypo_in_stack.terminated() || hypo_in_stack.is_about_to_leave_the_frustum())
+//                        continue;
+
+                                    // Compute intersection and overlap fraction!
+                                    std::vector<HypothesisInlier> intersect = intersect_inliers_(hypo, hypo_in_stack,
+                                                                                                 detections,
+                                                                                                 parameters_,
+                                                                                                 current_frame); //IntersectInliers(hypo, hypo_in_stack);
+                                    int num_obs_intersect = intersect.size();
+                                    int num_obs_old = hypo_in_stack.inliers().size();
+                                    int num_obs_new = hypo.inliers().size();
+                                    double frac = 0.0;
+                                    if (num_obs_intersect > 0) {
+                                        frac = static_cast<double>(num_obs_intersect) /
+                                               std::min(static_cast<double>(num_obs_old),
+                                                        static_cast<double>(num_obs_new));
+                                    }
+                                    if ((frac > parameters_.id_handling_overlap_threshold_) && // We take the hypo with longest intersection (not the one with best intersect. fraction!)
+                                        (num_obs_intersect > num_intersect_best)) {
+                                        hypo_id_new = hypo_in_stack.id();
+                                        num_intersect_best = num_obs_intersect;
+                                        index_best = stack_index;
+                                    }
+                                }
+                                // If no id was "inherited", then gen. a new one.
+                                if (hypo_id_new < 0) {
+                                    //std::cout << "\33[36;40;1m" << " New hypo with id: " << this->last_hypo_id_  << "\33[0m" << std::endl;
+                                    printf("New hypo with id: %d\n", this->last_hypo_id_ );
+
+                                    hypo.set_id(this->last_hypo_id_++);
+                                    hypo_stack_.push_back(hypo);  // Add new hypo to the stack
+                                    dont_reassign_these_hypo_ids.insert((hypo_id_new - 1));
+                                }
+                                else {
+                                    //std::cout << "\33[36;40;1m" << " Replacing hypo with id: " << hypo_id_new <<  "\33[0m" << std::endl;
+                                    printf("Replacing hypo with id: %d\n", hypo_id_new );
+
+                                    // We found overlapping active hypo. Let's assign id and update the stack!
+                                    hypo.set_id(hypo_id_new);
+                                    hypo_stack_.at(index_best) = hypo;
+
+                                    // We assigned this id to selected hypo -- we can't assign it again!
+                                    dont_reassign_these_hypo_ids.insert(hypo_id_new);
+
+                                    // Make sure old hypo with the same id is gone.
+                                    // This impl. just sets index to -1, so hypo has chance to be selected again. Alternatively, it could be removed.
+                                    for (int k=0; k<this->hypotheses_.size(); k++) {
+                                        if ( !static_cast<bool>(m[k]) && hypotheses_.at(k).id()==hypo_id_new) { // Need to be NOT selected, and have same id
+                                            hypotheses_.at(k).set_id(-1);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // ID_HANDLING
+
+                    //PrintHyposStates(hypotheses_, "After id handling:");
+
+
+//                    // ===================== DEBUG -- ARE IDS UNIQUE? ======================================
+//                    std::set<int> ids;
+//
+//                    int hypo_index = 0;
+//                    for (const auto &hypo:hypotheses_) {
+//                        int id = hypo.id();
+//
+//                        if (id>-1) {
+//                            if (ids.count(id)<=0) {
+//                                ids.insert(id);
+//                            }
+//                            else {
+//                                std::cout << "ID PROBLEM: DUPLICATE FOUND, DEBUG THIS!" << std::endl;
+//                                printf("Frame: %d, hypo id: %d, dupli index: %d\n", current_frame, id, hypo_index);
+//
+//                                assert(false);
+//                            }
+//                        }
+//
+//                        hypo_index ++;
+//                    }
+//                    // =====================================================================================
+
+                    //! Set MDL scores, last_selected
+                    for (int i = 0; i < m.size(); i++) {
+                        //hypotheses_.at(i).set_score(Q(i, i));
+                        int is_hypo_selected = m[i];
+                        if (is_hypo_selected) {
+                            hypotheses_.at(i).set_last_frame_selected(current_frame);
+                        }
+                    }
+//
+//    //! Write-out some stats
+//    std::cout << std::endl;
+//    std::cout << "==========================" << std::endl;
+//    std::cout << "Selected Hypotheses: " << std::endl;
+//    std::cout << "==========================" << std::endl;
+//    for (int i = 0; i < m.size(); i++) {
+//        int is_hypo_selected = m[i];
+//        if (is_hypo_selected) {
+//            std::cout << "SELECTED, id: " << hypotheses_.at(i).id() << ", score (MDL): " <<
+//                         hypotheses_.at(i).score() << std::endl;
+//
+//            auto motion_mode = hypotheses_.at(i).motion_states().back();
+//            std::cout << "Motion mode: " <<  ((motion_mode==Hypothesis::STATIC) ? "static" : "dynamic") << std::endl; //.GetMotionModeIndex() << std::endl;
+//            std::cout << "Num. motion modes: " << hypotheses_.at(i).motion_states().size() << std::endl;
+//            std::cout << "Num. poses: " << hypotheses_.at(i).poses().size() << std::endl;
+//            std::cout << "Num. chulls: " << hypotheses_.at(i).convex_hulls_ground_plane().size() << std::endl;
+//            std::cout << "----------------------------------------" << std::endl;
+//        }
+//        else {
+//            std::cout << "NOT SELECTED, id: " << hypotheses_.at(i).id() <<
+//                         " score: " << hypotheses_.at(i).score() << std::endl;
+//        }
+//    }
+//    std::cout << std::endl;
+
+                    //! Fill the 'selected set'
+                    selected_set_.clear();
+                    terminated_hypotheses_.clear();
+                    for (int i = 0; i < m.size(); i++) {
+                        int is_hypo_selected = m[i];
+                        if (is_hypo_selected && !(hypotheses_.at(i).terminated())) {
+                            selected_set_.push_back(hypotheses_.at(i));
+                        }
+                        else if (is_hypo_selected && hypotheses_.at(i).terminated()) {
+                            terminated_hypotheses_.push_back(hypotheses_.at(i));
+                        }
+                    }
+
+                    //! Remove hypos that weren't selected for a while.
+                    HypothesesVector filtered_set;
+                    for (const auto &hypo:hypotheses_) {
+                        if (std::abs(hypo.last_frame_selected() - current_frame) <=
+                            parameters_.nr_frames_not_selected_tolerance_)
+                            filtered_set.push_back(hypo);
+                        else
+                            printf("\nHypo %d not selected since frame %d, dropped.\n\n", hypo.id(), hypo.last_frame_selected());
+                        //    std::cout << "\33[36;40;1m" << "Hypo: " << hypo.id() << "not selected too long, DROPPED."  "\33[0m" << std::endl;
+
+                    }
+                    hypotheses_ = filtered_set;
+
+                    //PrintHyposStates(hypotheses_, "At the end:");
+                }
+
+                void MultiCueObjectTracker::ComputeUnaryScoresMDL(Detections::ConstPtr detections,
+                                                                  int current_frame,  HypothesesVector &hypos) {
+
+                    const int num_hypos = hypos.size();
+
+                    for (auto &hypo:hypos) {
+                        std::vector<HypothesisInlier> hypo_inliers = hypo.inliers();
+                        double hypo_score = 0.0;
+
+                        for (const HypothesisInlier &inlier:hypo_inliers) {
+                            hypo_score += (1.0 - parameters_.e2_ + parameters_.e2_ *
+                                                                   score_inlier_(hypo, inlier, detections,
+                                                                                 parameters_,
+                                                                                 current_frame)); //ScoreInlier(hypo, inlier, current_frame, parameters_.tau_));
+                        }
+
+                        // Exp. penaltiy for holes
+                        const int last_inlier_timestamp = hypo.inliers().back().timestamps().back();
+                        double hole_penalty = std::exp(
+                                -(static_cast<double>(current_frame - last_inlier_timestamp) /
+                                  parameters_.accepted_frames_without_inlier_));
+
+                        double mdl_score = -parameters_.e1_ + (hole_penalty * hypo_score);
+                        hypo.set_score(mdl_score);
+                        hypo.set_hole_penalty(hole_penalty);
+
+//        if (!hypo.terminated())
+//            hypo.set_score(mdl_score);
+//        else
+//            hypo.set_score(-1e10);
+                    }
+                }
+
+
+//! Need:
+// func. S(hypo, inlier)
+// func. intersect_detections(hypos[i], hypos[j])
+// func. compute_overlap(hypos[i], hypos[j])
+                Eigen::MatrixXd MultiCueObjectTracker::BuildMDLCostMatrix(const HypothesesVector &hypos,
+                                                                          Detections::ConstPtr detections,
+                                                                          int current_frame) {
+
+                    const int num_hypos = hypos.size();
+                    Eigen::MatrixXd Q(num_hypos, num_hypos);
+                    Q.setZero();
+
+                    const double hole_penalty = parameters_.hole_penalty_;
+
+
+                    for (int i = 0; i < num_hypos; i++) {
+                        Q(i, i) = hypos.at(i).score(); // Access MDL unary
+                    }
+
+                    bool cam_lookup_success = false;
+                    const SUN::utils::Camera &curr_frame_camera = detections->GetCamera(current_frame, cam_lookup_success);
+
+                    //! SECOND PASS: compute off-diagonal terms.
+                    //! TODO (Aljosa): Only compute upper-diagonal terms and "reflect" the matrix over the diagonal.
+                    for (int i = 0; i < num_hypos; i++) {
+                        //for (int j=0; j<num_hypos; j++) {
+                        for (int j = i + 1; j < num_hypos; j++) {
+                            //! Diagonal term ~ Hypo. score
+                            if (i != j) {
+                                auto det_intersection = this->intersect_inliers_(hypos.at(i), hypos.at(j), detections,
+                                                                                 parameters_,
+                                                                                 current_frame); //IntersectInliers(hypos.at(i), hypos.at(j));
+
+
+                                // Compute physical overlap penalty
+                                double physical_overlap_penalty = this->compute_physical_overlap_(hypos.at(i),
+                                                                                                  hypos.at(j),
+                                                                                                  detections,
+                                                                                                  parameters_,
+                                                                                                  current_frame);
+
+                                double sum_over_intersection = 0.0;
+
+                                // Are two hypos interacting?
+                                if (physical_overlap_penalty > 0.0) {
+
+                                    double discount_for_double_counting = 0.0;
+                                    if (det_intersection.size()) {
+                                        // Yes!
+                                        double mdl_score_hypo_i = Q(i, i);
+                                        double mdl_score_hypo_j = Q(j, j);
+                                        //const auto &weaker_hypo = ((mdl_score_hypo_i < mdl_score_hypo_j) ? hypos.at(i)
+                                        //                                                                : hypos.at(
+                                        //                                                                      j));
+
+                                        // Weaker hypo: the one farther away!
+                                        Eigen::Vector4d hypo_i_pose_cam =  curr_frame_camera.WorldToCamera(hypos.at(i).poses().back());
+                                        Eigen::Vector4d hypo_j_pose_cam = curr_frame_camera.WorldToCamera(hypos.at(j).poses().back());
+                                        const auto &weaker_hypo = (hypo_i_pose_cam[2] > hypo_j_pose_cam[2]) ? hypos.at(i) : hypos.at(j);
+
+                                        //double num_holes_penalty_weaker = ComputeHolePenalty(weaker_hypo, hole_penalty);
+
+                                        for (const auto &inlier:det_intersection) {
+                                            sum_over_intersection += (1.0 - parameters_.e2_) + parameters_.e2_ *
+                                                                                               score_inlier_(weaker_hypo,
+                                                                                                             inlier,
+                                                                                                             detections,
+                                                                                                             parameters_,
+                                                                                                             current_frame);
+                                        }
+
+                                        // Exp. penalty for holes
+                                        const int intersection_last_inlier_timestamp = det_intersection.back().timestamps().back();
+                                        double hole_penalty = std::exp(
+                                                -(static_cast<double>(current_frame - intersection_last_inlier_timestamp) /
+                                                  parameters_.accepted_frames_without_inlier_));
+
+                                        discount_for_double_counting = 0.5 * hole_penalty * sum_over_intersection;
+                                    }
+
+                                    //double hole_penalty = 1.0;
+                                    Q(i, j) = -0.5 * parameters_.e3_ * physical_overlap_penalty - discount_for_double_counting;
+                                    Q(j, i) = Q(i, j);
+
+                                }
+                            }
+                        }
+                    }
+                    return Q;
+                }
+
+
+
+
+
+
+// ==========================================================================
+//! Pre-defined MDL functions impl.
+// ==========================================================================
+                double ScoreInlierMultiCue(const Hypothesis &hypothesis, const HypothesisInlier &hypothesis_inlier,
+                                           Detections::ConstPtr detections, const MDL::MDLObjectTracker::Parameters &params,
+                                           int frame) {
+
+
+
+                    // detection_score, association_score
+                    auto inlier_timestamp = hypothesis_inlier.timestamps().back();
+                    auto inlier_id = hypothesis_inlier.indices().back();
+
+                    // Check, if the observation goes-out of the temporal window size. If it does, it should not contribute to the score!
+                    if (frame-params.temporal_window_size_ >= inlier_timestamp) {
+                        //std::cout << "Obs. out of tmp. window size. But don't worry and remove this msg!" << std::endl;
+                        return 0.0;
+                    }
+
+                    bool obs_lookup;
+                    const auto &observations = detections->GetObservations(inlier_timestamp, obs_lookup);
+
+                    if (!obs_lookup) // Goes out of temporal window, let's dont care about it
+                        return 0.0;
+
+                    const auto &obs = observations.at(inlier_id);
+
+                    double association_score = hypothesis_inlier.association_scores().back();
+                    int frame_of_detection = hypothesis_inlier.timestamps().back();
+
+                    // compute temporal decay: decay = std::exp( -(current_frame-inlier_frame) / tau )
+                    const double exp_decay = std::exp(
+                            -1.0 * (static_cast<double>(frame - frame_of_detection)) / params.tau_);
+
+                    double score = association_score * obs.score() * exp_decay; // * [hole_penalty_term <-- ?]
+                    return score;
+                }
+
+
+                void MultiCueObjectTracker::HypothesisUpdate(bool is_forward_update, int inlier_index, int current_frame, const ObservationVector &observations,
+                                                             const SUN::utils::Camera &camera_curr, const SUN::utils::Camera &camera_prev, Hypothesis &hypo, const Hypothesis::MotionType &motion_mode,
+                                                             Detections::ConstPtr detections)
+                {
+
+                    const double use_velocity_meas_dist_threshold = 40.0; // 40m cam. range
+                    //! There was associated observation; update hypo with this new observation.
+                    // * Update pose KF
+                    // * Update bounding-box KF
+                    // * Update shape, if we have 'enough' stereo evidence
+                    if (inlier_index>-1 /*&& (hypo.distance_prediction_from_exit_zone_ > 1.2)*/) {
+                        const auto nearest_neighbour_observation = observations.at(inlier_index);
+
+                        // ------------------------ Kalman Correction ---------------------------
+                        double dist_to_cam = nearest_neighbour_observation.footpoint()[2];
+
+                        //! Camera-to-World: Detection pose on ground plane
+                        Eigen::Vector4d inlier_footpoint_world = camera_curr.CameraToWorld(nearest_neighbour_observation.footpoint());
+
+                        // Update motion mode posterior (in cam. close range, if we have proposal avalible!)
+                        bool use_velocity_measurement = nearest_neighbour_observation.proposal_3d_avalible() && (nearest_neighbour_observation.footpoint()[2] < use_velocity_meas_dist_threshold);
+                        if (use_velocity_measurement) {
+                            Eigen::Vector2d velocity_gp_2d(nearest_neighbour_observation.velocity()[0], nearest_neighbour_observation.velocity()[2]);
+                            hypo.UpdateMotionModesPosteriorUsingNewMeasurement(velocity_gp_2d.norm());
+                        }
+
+                        // Update category posterior
+                        hypo.UpdateCategoryPosteriorUsingNewMeasurement(nearest_neighbour_observation.detection_category());
+
+                        // Update occlusion state
+                        const double w_occlusion = 0.4;
+                        hypo.set_occlusion(hypo.occlusion()*w_occlusion + (1.0-w_occlusion)*nearest_neighbour_observation.occluded_percentage());
+
+                        // TODO: 'move' shape model to KF-predicted pose
+                        // TODO: update shape model (register) if:
+                        // TODO:    * not occluded
+                        // TODO:    * not 'about to exit'
+                        // TODO:    * not too far (20 or 30m)
+
+                        // Use KalmanFilterHandler to update kalman filter.
+                        // TODO: if shape could have been registered, use pos&size estimates here.
+                        this->kalman_filter_handler_->KalmanFilterUpdate(nearest_neighbour_observation, camera_curr, motion_mode, is_forward_update, hypo);
+
+                        // ------------------- Update hypo entries -------------------------------
+                        const Eigen::VectorXd &kalman_posterior = hypo.kalman_filter_const()->x();
+                        Eigen::Vector2d pose_gp = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(hypo.kalman_filter_const())->GetPoseGroundPlane(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+                        hypo.AddEntry(Eigen::Vector4d(pose_gp[0], inlier_footpoint_world[1], pose_gp[1], 1.0), current_frame);
+
+                        //auto kf_bbox2d = hypo.bounding_box_kalman_filter()->x().head<4>();
+                        Eigen::Vector4d kf_bbox2d = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(hypo.kalman_filter_const())->GetBoundingBox2d(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+
+                        hypo.add_bounding_box_2d(ReparametrizeBoundingBoxCenterToTopPoint(kf_bbox2d));
+                        hypo.set_color_histogram(0.4 * hypo.color_histogram() +
+                                                 0.6 * nearest_neighbour_observation.color_histogram());
+
+                        // After assoc., update the shape model.
+                        if (this->parameters_.shape_3d_tracking_)
+                            update_hypo_shape_model_with_new_measurements_(hypo, detections, current_frame);
+
+                        // Push filtered bbox3d to the hypo state.
+                        // TODO: find height from ground-plane
+                        double height_estim = kalman_posterior[5];
+                        Eigen::Vector4d center_in_cam = camera_curr.WorldToCamera(Eigen::Vector4d(kalman_posterior[0], inlier_footpoint_world[1]-height_estim/2.0, kalman_posterior[1],1.0));
+                        Eigen::VectorXd filtered_bbox_3d;
+                        filtered_bbox_3d.setZero(6);
+                        filtered_bbox_3d << center_in_cam[0], center_in_cam[1], center_in_cam[2], kalman_posterior[4], kalman_posterior[5], kalman_posterior[6];
+                        hypo.add_bounding_box_3d(filtered_bbox_3d);
+
+                        auto chull_world = SUN::utils::geometry::ConvexHullGroundPlaneCameraToWorld(nearest_neighbour_observation.convex_hull_ground_plane(),
+                                                                                                    nearest_neighbour_observation.footpoint()[1], camera_curr);
+                        // 2. Add to hypo!
+                        hypo.add_convex_hull(current_frame, chull_world);
+
+                    }
+
+                        //! There was NO associated observation; try to make a smart guess.
+                        // * update 2d bbox entry with prediction
+                        // * update 3d bbox with prediction
+                        // * update shape model with KF prediction (just pose transform)
+                    else {
+
+                        // Get pose prediction in world space.
+                        const auto &kalman_prediction = hypo.kalman_filter_const()->x(); // Take predicted pose
+                        double last_pose_height = hypo.poses().back()[1];
+                        Eigen::Vector4d predicted_pose = Eigen::Vector4d(kalman_prediction[0], last_pose_height,
+                                                                         kalman_prediction[1], 1.0);
+
+                        Eigen::Vector4d predicted_pose_cam_space = camera_curr.WorldToCamera(predicted_pose);
+                        predicted_pose_cam_space.head<3>() = camera_curr.ground_model()->ProjectPointToGround(predicted_pose_cam_space.head<3>());
+
+
+                        // Update bbox KF
+                        //auto kf_bbox2d = hypo.bounding_box_kalman_filter()->x().head<4>(); // Take predicted bounding box
+                        Eigen::Vector4d kf_bbox2d = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(hypo.kalman_filter_const())->GetBoundingBox2d(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+
+                        //kf_bbox2d
+                        hypo.add_bounding_box_2d(ReparametrizeBoundingBoxCenterToTopPoint(kf_bbox2d));
+
+                        // Update pose KF
+                        hypo.AddEntry(predicted_pose, current_frame);
+
+
+                        // After assoc., extrapolate the shape model (align shape with the prediction)
+                        if (this->parameters_.shape_3d_tracking_)
+                            update_hypo_shape_model_with_new_measurements_(hypo, detections, current_frame);
+
+                        // Update 3D bounding-box
+                        // TODO: find height from ground-plane
+                        double height_estim = kalman_prediction[5];
+                        Eigen::Vector4d center_in_cam = camera_curr.WorldToCamera(Eigen::Vector4d(kalman_prediction[0], last_pose_height-height_estim/2.0,
+                                                                                                  kalman_prediction[1], 1.0));
+                        Eigen::VectorXd filtered_bbox_3d;
+                        filtered_bbox_3d.setZero(6);
+                        filtered_bbox_3d << center_in_cam[0], center_in_cam[1], center_in_cam[2], kalman_prediction[4], kalman_prediction[5], kalman_prediction[6];
+                        hypo.add_bounding_box_3d(filtered_bbox_3d);
+
+                        // Use KF prediction, make 'updated' chull
+                        auto last_chull = hypo.convex_hulls_ground_plane().end()->second; // .back();
+                        // Apply KF prediction!
+                        for (auto &p2d:last_chull) {
+                            // Add estim. translation
+                            Eigen::Vector4d t = hypo.poses().back() - hypo.poses().at(hypo.poses().size()-2);
+                            p2d += Eigen::Vector2d(t[0], t[2]);
+                        }
+                        hypo.add_convex_hull(current_frame, last_chull);
+                    }
+
+                    // Add discrete motion state, based on current motion estimate!
+                    if (hypo.motion_modes_probability_distribution_.size() > 0) {
+                        auto maxima_it = std::max_element(hypo.category_probability_distribution_.begin(),
+                                                          hypo.category_probability_distribution_.end());
+                        int categ_max_posteriori_index = std::distance(hypo.category_probability_distribution_.begin(),
+                                                                       maxima_it);
+                        if ((hypo.motion_modes_probability_distribution_[0] > 0.95) && (categ_max_posteriori_index != 1)) { // 1... pedestrian
+                            hypo.add_motion_state(Hypothesis::STATIC);
+                        }
+                        else {
+                            hypo.add_motion_state(Hypothesis::DYNAMIC);
+                        }
+                    }
+                }
+
+
+                void MultiCueObjectTracker::HypothesisInit(bool is_forward_update, int inlier_index, int current_frame, double dt,
+                                                           const ObservationVector &observations, const SUN::utils::Camera &camera, Hypothesis &hypo,  const Hypothesis::MotionType &motion_mode) {
+                    const auto &observation = observations.at(inlier_index);
+
+<<<<<<< HEAD
+
+
+                    // ------------------------------ Init hypothesis -----------------------------------
+                    //double dist_from_cam = observation.footpoint()[2];
+=======
+                    // ------------------------------ Init hypothesis -----------------------------------
+                    double dist_from_cam = observation.footpoint()[2];
+>>>>>>> 54d549e1011a437c512400706e926b3ff2360778
+                    Eigen::Vector4d detection_footpoint_world_space = camera.CameraToWorld(observation.footpoint());
+                    this->kalman_filter_handler_->KalmanFilterInit(observation, camera, motion_mode, is_forward_update, hypo);
+
+                    // --------------------- Update hypo entries -----------------------------------------
+                    hypo.AddEntry(detection_footpoint_world_space, current_frame);
+                    hypo.add_motion_state(motion_mode); //, current_frame);
+
+
+<<<<<<< HEAD
+                    auto chull_world = SUN::utils::geometry::ConvexHullGroundPlaneCameraToWorld(observation.convex_hull_ground_plane(), observation.footpoint()[1], camera);
+=======
+                    auto chull_world = SUN::utils::geometry::ConvexHullGroundPlaneCameraToWorld(observation.convex_hull_ground_plane(),
+                                                                                                observation.footpoint()[1], camera);
+>>>>>>> 54d549e1011a437c512400706e926b3ff2360778
+                    hypo.add_convex_hull(current_frame, chull_world);
+
+                    //auto kf_bbox2d = hypo.bounding_box_kalman_filter()->x().head<4>();
+                    Eigen::Vector4d kf_bbox2d = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(hypo.kalman_filter_const())->GetBoundingBox2d(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+<<<<<<< HEAD
+                    hypo.add_bounding_box_2d(ReparametrizeBoundingBoxCenterToTopPoint(kf_bbox2d));
+                    hypo.set_color_histogram(observation.color_histogram());
+
+                    //    // ------------------------------ Add bbox 3d ------------------------------------
+                    //    auto kf_state_3d = hypo.kalman_filter()->x();
+                    //    Eigen::Vector4d center_in_cam = camera.WorldToCamera(Eigen::Vector4d(kf_state_3d[0], observation.footpoint()[1], kf_state_3d[1],1.0));
+                    //
+                    //    // No shape model -- use KF bbox estim.
+                    //    Eigen::VectorXd filtered_bbox_3d;
+                    //    filtered_bbox_3d.setZero(6);
+                    //    filtered_bbox_3d << center_in_cam[0], center_in_cam[1], center_in_cam[2], kf_state_3d[4], kf_state_3d[5], kf_state_3d[6];
+                    //    hypo.add_bounding_box_3d(filtered_bbox_3d);
+                    //    // -----------------------------------------------------------------------
+=======
+
+                    hypo.add_bounding_box_2d(ReparametrizeBoundingBoxCenterToTopPoint(kf_bbox2d));
+                    hypo.set_color_histogram(observation.color_histogram());
+
+
+                    // Push filtered bbox3d to the hypo state.
+                    // TODO: find height from ground-plane
+                    Eigen::VectorXd kalman_posterior = hypo.kalman_filter()->x();
+                    double height_estim = kalman_posterior[5];
+                    Eigen::Vector4d center_in_cam = camera.WorldToCamera(Eigen::Vector4d(kalman_posterior[0], detection_footpoint_world_space[1]-height_estim/2.0, kalman_posterior[1],1.0));
+                    // No shape model -- use KF bbox estim.
+                    Eigen::VectorXd filtered_bbox_3d;
+                    filtered_bbox_3d.setZero(6);
+                    filtered_bbox_3d << center_in_cam[0], center_in_cam[1], center_in_cam[2], kalman_posterior[4], kalman_posterior[5], kalman_posterior[6];
+                    hypo.add_bounding_box_3d(filtered_bbox_3d);
+
+>>>>>>> 54d549e1011a437c512400706e926b3ff2360778
+
+                    // Need to do! Aljosa: explain, impl. differently so people don't shoot themselves in the leg!
+                    //hypo.set_last_frame_selected(current_frame);
+                }
+
+
+
+
+                //! ========================================================================================================================
+                //!                                 Data Assoc. + Hypo Handling Functions
+                //!                           TODO (Aljosa): interface those via functors
+                //! ========================================================================================================================
+                //! Find nearest neighbour detection.
+
+                auto pose_covariance_3d_to_2d = [](const Eigen::Matrix3d &pose_covariance_3d)->Eigen::Matrix2d {
+                    Eigen::Matrix2d pose_covariance_2d = Eigen::Matrix2d::Identity();
+                    pose_covariance_2d(0, 0) = pose_covariance_3d(0, 0);
+                    pose_covariance_2d(0, 1) = pose_covariance_3d(0, 2);
+                    pose_covariance_2d(1, 0) = pose_covariance_3d(2, 0);
+                    pose_covariance_2d(1, 1) = pose_covariance_3d(2, 2);
+
+                    return pose_covariance_2d;
+                };
+
+
+
+                // NEW VERSION; EXPERIMENT;
+                // ASSOC. TYPED OBSERVATIONS FIRST.
+                bool  MultiCueObjectTracker::AssociateObservationToHypothesis(const ObservationVector &observations,
+                                                                              const SUN::utils::Camera &camera,
+                                                                              const Hypothesis &hypo,
+                                                                              std::vector<double> &observations_association_scores,
+                                                                              std::vector< std::vector<double> > &association_scores_debug) {
+
+                    //std::vector< std::vector<double> > association_scores_debug;
+                    association_scores_debug.clear();
+                    association_scores_debug.resize(observations.size());
+
+                    observations_association_scores.clear();
+                    observations_association_scores.resize(observations.size());
+                    observations_association_scores.assign(observations.size(), 0.0);
+                    bool at_least_one_inlier_found = false;
+
+
+                    // Filtered 2D pose on the ground plane
+                    Eigen::Vector2d kalman_prediction_ground_plane = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetPoseGroundPlane(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+                    Eigen::Matrix2d pred_cov_2d = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetPoseCovariance(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+
+                    // Filtered image-plane bounding-box
+                    Eigen::Vector4d bbox_2d_kf = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetBoundingBox2d(); // static_cast< std::shared_ptr<const ConstantVelocityBoundingBoxKalmanFilter> >(hypo.kalman_filter_const())->GetBoundingBox2d();
+                    const Eigen::Vector4d &hypo_bbox_2d = ReparametrizeBoundingBoxCenterToTopPoint(bbox_2d_kf);
+
+                    // Filtered 3D bounding-box size
+                    const Eigen::Vector3d &hypo_bbox_3d_size = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetSize3d();
+                    const Eigen::Matrix3d &hypo_bbox_3d_cov = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetSizeCovariance();
+
+                    // Filtered 2D velocity on the ground plane
+                    const Eigen::Vector2d &hypo_vel_2d = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetVelocityGroundPlane();
+                    const Eigen::Matrix2d &hypo_vel_2d_cov = std::static_pointer_cast<const ConstantVelocityBoundingBoxKalmanFilter>(
+                            hypo.kalman_filter_const())->GetVelocityCovariance();
+
+                    // Early-rejection for incompatible hypothesis<->observation asssociations
+                    // TODO probalistic formulation
+
+                    // =======================================================
+                    // ASSOC. TYPED CUES HERE
+                    // =======================================================
+
+                    //std::vector<bool> was_hypo_extended(hypot);
+                    for (int i = 0; i < observations.size(); i++) {
+                        const auto &observation = observations.at(i);
+
+//                if (observation.detection_category()==GOT::tracking::object::Observation::UNKNOWN_TYPE)
+//                    continue;
+
+                        // Reject early, if hypo and obs. categ. is compatible.
+                        // TODO: Probalistic formulation.
+                        bool reject_incompatible_category = false;
+                        auto hypo_category = hypo.GetCategoryType();
+                        auto obs_category = observation.detection_category();
+                        auto hypo_category_probability = hypo.GetCategoryProbability();
+                        if (hypo_category_probability > 0.9) { // If we are confident in what we are, do category-check
+                            if (hypo_category == Observation::CAR) {
+                                if ((obs_category != Observation::CAR) && (obs_category != Observation::TRUCK) &&
+                                    (obs_category != Observation::VAN) && (obs_category != Observation::UNKNOWN_TYPE)) {
+                                    reject_incompatible_category = true;
+                                }
+                            }
+                            if (hypo_category == Observation::CYCLIST) {
+                                if ((obs_category != Observation::PEDESTRIAN) &&
+                                    (obs_category != Observation::CYCLIST) &&
+                                    (obs_category != Observation::UNKNOWN_TYPE)) {
+                                    reject_incompatible_category = true;
+                                }
+                            }
+                            if (hypo_category == Observation::PEDESTRIAN) {
+                                if ((obs_category != Observation::PEDESTRIAN) &&
+                                    (obs_category != Observation::CYCLIST) &&
+                                    (obs_category != Observation::UNKNOWN_TYPE)) {
+                                    reject_incompatible_category = true;
+                                }
+                            }
+                            if (reject_incompatible_category)
+                                continue;
+                        }
+                        // -----------------------------------------------------------------
+
+                        Eigen::Vector4d detection_bbox_2d = observation.bounding_box_2d();
+                        Eigen::VectorXd detection_bbox_3d = observation.bounding_box_3d();
+                        Eigen::Vector3d detection_bbox_3d_size = detection_bbox_3d.block(3, 0, 3, 1);
+                        Eigen::Vector4d detection_footpoint_in_world_coords = camera.CameraToWorld(
+                                observation.footpoint()); // Assume gp-projected pose!
+
+                        const double detection_dist_from_camera = observation.footpoint()[2];
+
+                        Eigen::Vector2d detection_footpoint_ground_plane = Eigen::Vector2d(
+                                detection_footpoint_in_world_coords[0], detection_footpoint_in_world_coords[2]);
+                        Eigen::Matrix3d cov_3d_meas_world_space = camera.R() * observation.covariance3d() *
+                                                                  camera.R().transpose(); // Very important: apply VO on cov. matrix!
+                        Eigen::Matrix2d cov2d_detection_pose_on_ground_plane = pose_covariance_3d_to_2d(
+                                cov_3d_meas_world_space);
+
+                        bool invertible;
+                        double determinant_size=0.0;
+
+                        // Compute mh_dist in 3d bbox size
+                        Eigen::Vector3d size_diff = detection_bbox_3d_size - hypo_bbox_3d_size;
+                        Eigen::Matrix3d cov_size_3d_inverse;
+                        Eigen::Matrix3d prior_uncertainty_cov = Eigen::Matrix3d::Identity();
+                        prior_uncertainty_cov(0) *= 0.3 * 0.3;
+                        prior_uncertainty_cov(1) *= 0.2 * 0.2;
+                        prior_uncertainty_cov(2) *= 1.0 * 1.0;
+                        (/*hypo_bbox_3d_cov +*/ prior_uncertainty_cov).computeInverseAndDetWithCheck(cov_size_3d_inverse,
+                                                                                                     determinant_size, invertible);
+                        if (!invertible) {
+                            std::cout <<
+                            "AssociateObservationToHypothesis::ERROR: Cov. matrix is not invertible! Can't do association!" <<
+                            std::endl;
+                            return -1;
+                        }
+                        const double mahalanobis_dist_size_3d_squared = size_diff.transpose() * cov_size_3d_inverse * size_diff;
+
+                        // Compute Mahalanobis distance between the observation and prediction
+                        double determinant_pose = 0.0;
+                        const Eigen::Vector2d pose_diff = detection_footpoint_ground_plane - kalman_prediction_ground_plane;
+                        Eigen::Matrix2d cov_2d_inverse;
+                        (cov2d_detection_pose_on_ground_plane /*+ pred_cov_2d*/).computeInverseAndDetWithCheck(cov_2d_inverse,
+                                                                                                               determinant_pose,
+                                                                                                           invertible);
+                        if (!invertible) {
+                            std::cout <<
+                            "AssociateObservationToHypothesis::ERROR: Cov. matrix is not invertible! Can't do association!" <<
+                            std::endl;
+                            return -1;
+                        }
+                        const double mahalanobis_dist_squared = pose_diff.transpose() * cov_2d_inverse * pose_diff;
+
+                        // Compute mh-dist in estimated obj. velocity and observation velocity
+                        // TODO . . .
+
+
+                        // Compute IOU_2D
+                        double IOU_2d = SUN::utils::geometry::IntersectionOverUnion2d(hypo_bbox_2d, detection_bbox_2d);
+
+                        //! Set the optimal gaiting thresholds!
+                        // CHI2INV_2_95 = 5.991464 Inverse of the chi2-cdf with 2 dofs at 0.95.
+                        // CHI2INV_2_99 = 9.210340 Inverse of the chi2-cdf with 2 dofs at 0.99.
+                        double observation_dist_from_camera = observation.footpoint()[2];
+                        const double chi_sq_volume_threshold = 5.99; //5.99; //3.0; //5.99; //5.99; //5.99;
+                        double IOU_threshold = 0.1;
+//                        if (observation_dist_from_camera < 20)
+//                            IOU_threshold = 0.1;
+//                        else if (observation_dist_from_camera > 20 && observation_dist_from_camera < 30)
+//                            IOU_threshold = 0.2;
+//                        else if (observation_dist_from_camera > 30 && observation_dist_from_camera < 40)
+//                            IOU_threshold = 0.25;
+//                        else if (observation_dist_from_camera > 40 && observation_dist_from_camera < 50)
+//                            IOU_threshold = 0.25;
+//                        if (observation_dist_from_camera > 50)
+//                            IOU_threshold = 0.3;
+
+                        //! Compute weights
+                        double denom = std::sqrt(39.47841 * std::abs(determinant_pose));
+                        assert(denom > 0.0);
+                        double motion_model_weight =  (1.0 / denom) *std::exp(-0.5 * mahalanobis_dist_squared);
+
+                        assert(motion_model_weight < 1.01);
+
+                        double bbox_iou_model_weight = IOU_2d; //std::exp(-4.0 * (1.0 - IOU_2d));
+
+                        // ============================== SCORE DATA ASSOCIATION ==============================================
+                        if ((std::sqrt(mahalanobis_dist_squared) < chi_sq_volume_threshold) && (IOU_2d > IOU_threshold)) {
+
+                            double w1 = std::exp(-0.04*detection_dist_from_camera); //0.5;
+                            double w2 = 1.0 - w1;
+
+                            double association_score = w1 * motion_model_weight + w2 * bbox_iou_model_weight;
+                           // double association_score = motion_model_weight * bbox_iou_model_weight;
+
+                            if (association_score > 0.000001) {
+                                at_least_one_inlier_found = true;
+                                observations_association_scores.at(i) = association_score;
+
+                                association_scores_debug.at(i).push_back(w1);
+                                association_scores_debug.at(i).push_back(w2);
+                                association_scores_debug.at(i).push_back(motion_model_weight);
+                                association_scores_debug.at(i).push_back(bbox_iou_model_weight);
+                                association_scores_debug.at(i).push_back(association_score);
+
+
+                            }
+                        }
+                        // =========================================================================================
+                    }
+
+                    return at_least_one_inlier_found;
+
+                }
+
+                std::vector<Hypothesis> MultiCueObjectTracker::terminated_hypotheses() const {
+//                    std::vector<Hypothesis> terminated_hypos;
+//
+//                    for (const auto &hypo:hypotheses_) {
+//                        if (hypo.terminated()) {
+//                            terminated_hypos.push_back(hypo);
+//                        }
+//                    }
+
+                    return terminated_hypotheses_;
+                }
+
+
+            }
+
+        }
+    }
+}
