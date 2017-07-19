@@ -40,15 +40,25 @@ If you find the tracker useful in your research, please consider citing:
 
 ## Remarks
 
-* Tracking Modes
+* Tracking modes
     * There are two tracking modes, `detection` and `detection_shape` (set via `--tracking_mode`, or set in the config)
-    * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), but `detection_shape` localizes tracked object significantly more accurately in the 3D space.
+    * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), `detection_shape` provides significantly more precise localization in the 3D space.
 
-* Data Preprocessing
-    * Tracker needs disparity maps to run, `detection_shape` additionally requires 3D segments
-    * When you run tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time
+* Data preprocessing
+    * Tracker needs disparity maps to run, `detection_shape` additionally requires 3D segments (generic object proposals).
+    * When you run tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time.
 
-* Run the tracker in `release` mode
+* External libraries
+    * Tracker ships the following external modules:
+        * *libelas* - disparity estimation (http://www.cvlibs.net/software/libelas/)
+        * *libviso2* - egomotion estimation (http://www.cvlibs.net/software/libviso/)
+
+* Etc
+    * Tracker does not ship scene-flow estimator.
+    * In paper experiments, we additionally used scene-flow to obtain velocity estimates of the 3D segments. You can input to the tracker velocity maps via `--flow_map_path`, but it is not necessary. Tracker will work just fine without it.
+
+* Run the tracker in `release` mode (oterwise it will be slow).
+
 ## License
 
 GNU General Public License (http://www.gnu.org/licenses/gpl.html)
