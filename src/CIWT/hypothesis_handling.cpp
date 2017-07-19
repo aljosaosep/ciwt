@@ -42,7 +42,7 @@ namespace GOT {
                 const auto &ref_camera = detections->GetCamera(reference_frame, camera_lookup_success);
                 assert(camera_lookup_success);
                 const auto &ref_camera_minus_one = detections->GetCamera(reference_frame - 1, camera_prev_lookup_success);
-                //assert(camera_prev_lookup_success);
+                assert(camera_prev_lookup_success);
                 const std::vector<Observation> &ref_state_observations = detections->GetObservations(reference_frame, detections_lookup_success);
 
                 if (detections_lookup_success && camera_lookup_success) {
