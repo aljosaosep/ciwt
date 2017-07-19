@@ -17,7 +17,20 @@ In order to run the code, your setup has to meet the following minimum requireme
   * PCL (1.8.x)
 
 ## Install
-TODO
+0.  mkdir build
+0.  cmake ..
+0.  make all
+
+## Citing
+
+If you find the tracker useful in your research, please consider citing:
+
+    @inproceedings{Osep17ICRA,
+      title={Combined Image- and World-Space Tracking in Traffic Scenes},
+      author={O\v{s}ep, Aljo\v{s}a and Mehner, Wolfgang and Mathias, Markus and Leibe, Bastian},
+      booktitle={ICRA},
+      year={2017}
+    }
 
 ## License
 
