@@ -437,7 +437,7 @@ int main(const int argc, const char** argv) {
     SUN::utils::dirty::DatasetAssitantDirty dataset_assistant(variables_map); // Data loading hacky module
     PointCloudRGBA::Ptr left_point_cloud_preprocessed; // Preprocessed cloud
     std::vector<GOT::segmentation::ObjectProposal> object_proposals_all; // 'Raw' object proposals set
-    std::shared_ptr<GOT::tracking::Resources> resource_manager(new GOT::tracking::Resources(variables_map["tracking_temporal_window_size"].as<int>()));
+    std::shared_ptr<GOT::tracking::Resources> resource_manager(new GOT::tracking::Resources(variables_map["tracking_temporal_window_size"].as<int>()+1));
 
     // -------------------------------------------------------------------------------
     // +++ Visual odometry module +++
@@ -676,7 +676,7 @@ int main(const int argc, const char** argv) {
             char frame_str_buff[50];
             snprintf(frame_str_buff, 50, (CIWTApp::sequence_name + "_%06d").c_str(), current_frame);
             char output_path_buff[500];
-            
+
             if (CIWTApp::run_tracker) {
                 // Tracking 2D visualization
                 snprintf(output_path_buff, 500, "%s/hypos_2d_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
