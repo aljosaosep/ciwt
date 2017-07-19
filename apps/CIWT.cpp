@@ -254,7 +254,7 @@ namespace CIWTApp {
             po::options_description generic_options("Command line options:");
             generic_options.add_options()
                     ("help", "Produce help message")
-                    ("config", po::value<std::string>(&config_file), "Config file path.")
+                    ("config", po::value<std::string>(&config_file)->required(), "Config file path.")
                     ("config_parameters", po::value<std::string>(&config_parameters_file), "Config file path (parameters only!).")
                     ("show_visualization_3d", po::bool_switch(&show_visualization_3d)->default_value(false), "Show 3D visualization.")
                     ("show_visualization_2d", po::bool_switch(&show_visualization_2d)->default_value(false), "Show 2D visualization.")
@@ -659,16 +659,11 @@ int main(const int argc, const char** argv) {
         /// Draw observations and tracked objects
         cv::Mat left_image_with_observations = left_image.clone();
         cv::Mat left_image_with_hypos_2d = left_image.clone();
-        cv::Mat left_image_with_hypos_3d = left_image.clone();
         cv::Mat left_image_with_detections = left_image.clone();
-        cv::Mat left_image_topdown;
 
         if (CIWTApp::debug_level>=2 || CIWTApp::show_visualization_2d) {
             CIWTApp::tracking_visualizer.DrawObservations(observations_all, left_image_with_observations, left_camera, GOT::tracking::draw_observations::DrawObservationAndOrientation);
             CIWTApp::tracking_visualizer.DrawHypotheses(hypos_to_process_further, left_camera, left_image_with_hypos_2d, GOT::tracking::draw_hypos::DrawHypothesis2d);
-            CIWTApp::tracking_visualizer.DrawHypotheses(hypos_to_process_further, left_camera, left_image_with_hypos_3d, GOT::tracking::draw_hypos::DrawHypothesis3d);
-            SUN::utils::visualization::DrawDetections(detections_current_frame, left_image_with_detections);
-            CIWTApp::tracking_visualizer.DrawTrajectoriesBirdEye(hypos_to_process_further, left_point_cloud_preprocessed, left_camera, left_image_topdown);
         }
 
         if (CIWTApp::show_visualization_2d) {
@@ -681,22 +676,11 @@ int main(const int argc, const char** argv) {
             char frame_str_buff[50];
             snprintf(frame_str_buff, 50, (CIWTApp::sequence_name + "_%06d").c_str(), current_frame);
             char output_path_buff[500];
-
-            // Detections
-            snprintf(output_path_buff, 500, "%s/detections_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
-            cv::imwrite(output_path_buff, left_image_with_detections);
-
+            
             if (CIWTApp::run_tracker) {
                 // Tracking 2D visualization
                 snprintf(output_path_buff, 500, "%s/hypos_2d_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
                 cv::imwrite(output_path_buff, left_image_with_hypos_2d);
-
-                snprintf(output_path_buff, 500, "%s/hypos_3d_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
-                cv::imwrite(output_path_buff, left_image_with_hypos_3d);
-
-                // Tracking top-down visualization
-                snprintf(output_path_buff, 500, "%s/hypos_topdown_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
-                cv::imwrite(output_path_buff, left_image_topdown*255);
             }
         }
 
@@ -734,7 +718,7 @@ int main(const int argc, const char** argv) {
     printf ("================ PROCESSING TIME ================\n");
     printf ("Total processing time %f (milisec) for %d frames.\n", total_processing_time, CIWTApp::end_frame-CIWTApp::start_frame);
     printf ("That is %f (milisec) per-frame.\n", total_processing_time / static_cast<double>(CIWTApp::end_frame-CIWTApp::start_frame));
-    printf ("You like?\n");
+    printf ("Note: processing time excludes tracker-input-data processing (disparity estimation, proposal generation etc.)\n");
     printf ("=================================================\n");
 
     // KITTI I/O label export obj.
