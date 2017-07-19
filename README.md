@@ -24,7 +24,8 @@ In order to run the code, your setup has to meet the following minimum requireme
 0.  `make all`
 
 ### Running the tracker
-0.  `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d
+0.  Edit the config `%PROJ_DIR%/data/kitti_sample.cfg`, set all the paths
+0.  Run the tracker eg. `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d`
 
 ## Citing
 
