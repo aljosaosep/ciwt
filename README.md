@@ -17,9 +17,9 @@ In order to run the code, your setup has to meet the following minimum requireme
   * PCL (1.8.x)
 
 ## Install
-0.  mkdir build
-0.  cmake ..
-0.  make all
+0.  'mkdir build'
+0.  'cmake ..'
+0.  'make all'
 
 ## Citing
 
