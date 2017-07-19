@@ -24,7 +24,7 @@ In order to run the code, your setup has to meet the following minimum requireme
 0.  `make all`
 
 ### Running the tracker
-0.  Edit the config `%PROJ_DIR%/data/kitti_sample.cfg`, set all the paths
+0.  Edit the config `%PROJ_DIR%/data/kitti_sample.cfg`, set all the paths.
 0.  Run the tracker eg. `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d`
 
 ## Citing
@@ -38,6 +38,17 @@ If you find the tracker useful in your research, please consider citing:
       year={2017}
     }
 
+## Remarks
+
+* Tracking Modes
+    * There are two tracking modes, `detection` and `detection_shape` (set via `--tracking_mode`, or set in the config)
+    * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), but `detection_shape` localizes tracked object significantly more accurately in the 3D space.
+
+* Data Preprocessing
+    * Tracker needs disparity maps to run, `detection_shape` additionally requires 3D segments
+    * When you run tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time
+
+* Run the tracker in `release` mode
 ## License
 
 GNU General Public License (http://www.gnu.org/licenses/gpl.html)
