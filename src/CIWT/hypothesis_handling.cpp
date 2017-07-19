@@ -42,7 +42,7 @@ namespace GOT {
                 const auto &ref_camera = detections->GetCamera(reference_frame, camera_lookup_success);
                 assert(camera_lookup_success);
                 const auto &ref_camera_minus_one = detections->GetCamera(reference_frame - 1, camera_prev_lookup_success);
-                assert(camera_prev_lookup_success);
+                //assert(camera_prev_lookup_success);
                 const std::vector<Observation> &ref_state_observations = detections->GetObservations(reference_frame, detections_lookup_success);
 
                 if (detections_lookup_success && camera_lookup_success) {
@@ -239,7 +239,7 @@ namespace GOT {
                         const int first_frame = inliers.front().timestamp_;
                         const int first_frame_inlier_index =  inliers.front().index_;
                         const auto &camera_first_frame = detections->GetCamera(first_frame, first_frame_camera_lookup_success);
-                        assert(camera_lookup_success);
+                        //assert(camera_lookup_success);
                         const std::vector<Observation> &observations_2d_first_frame = detections->GetObservations(first_frame, first_frame_detections_lookup_success);
 
                         if (first_frame_camera_lookup_success && first_frame_detections_lookup_success) {
