@@ -261,14 +261,14 @@ namespace SUN {
                 bool status = false;
                 if (dataset_string=="kitti")
                     status = this->LoadData__KITTI(current_frame);
-                else if (dataset_string=="kitti_disparity")
+//                else if (dataset_string=="kitti_disparity")
 //                    status = this->LoadData__KITTI__DISPARITY(current_frame);
 //                else if (dataset_string=="schipool")
 //                    status = this->LoadData__SCHIPOOL(current_frame);
 //                else if (dataset_string=="rwth")
 //                    status = this->LoadData__RWTH(current_frame);
-//                else
-                    std::cout << "ERROR! DatasetAssitantDirty::LoadData says: no such dataset: " << dataset_string << std::endl;
+                else
+                    std::cout << "DatasetAssitantDirty error: no such dataset: " << dataset_string << std::endl;
 
                 return status;
             }
@@ -292,7 +292,7 @@ namespace SUN {
                 /// Image data
                 left_image_ = cv::imread(left_image_path_buff, CV_LOAD_IMAGE_COLOR);
                 if (left_image_.data == nullptr) {
-                    sprintf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
+                    printf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
                     return false;
                 }
 
@@ -312,16 +312,19 @@ namespace SUN {
                     right_image_ = cv::imread(right_image_path_buff, CV_LOAD_IMAGE_COLOR);
 
                     if (right_image_.data == nullptr) {
-                        sprintf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
+                        printf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
                         return false;
                     }
                 }
 
                 /// Disparity map
+                pcl::PointCloud<pcl::PointXYZRGBA>::Ptr point_cloud_ptr = nullptr;
                 if (this->variables_map_.count("left_disparity_path")) {
 
-                    if (!(this->RequestDisparity(current_frame, true)))
+                    if (!(this->RequestDisparity(current_frame, true))) {
+                        printf("DatasetAssitantDirty error: RequestDisparity failed!\r\n");
                         return false;
+                    }
 
                     char left_disparity_map_buff[MAX_PATH_LEN];
                     snprintf(left_disparity_map_buff, MAX_PATH_LEN, this->variables_map_["left_disparity_path"].as<std::string>().c_str(), current_frame);
@@ -329,7 +332,7 @@ namespace SUN {
                     disparity_map_.Read(left_disparity_map_buff);
 
                     if (disparity_map_.mat().data == nullptr) {
-                        sprintf("DatasetAssitantDirty error: could not load disparity map: %s\r\n", left_disparity_map_buff);
+                        printf("DatasetAssitantDirty error: could not load disparity map: %s\r\n", left_disparity_map_buff);
                         return false;
                     }
 
@@ -339,9 +342,9 @@ namespace SUN {
                     SUN::utils::pointcloud::ConvertDisparityMapToPointCloud(disparity_map_.mat(), left_image_,
                                                                             calibration.c_u(), calibration.c_v(), calibration.f(), calibration.b(),
                                                                             Eigen::Matrix4d::Identity(), true, left_point_cloud_);
+                    point_cloud_ptr = left_point_cloud_;
                 }
 
-                auto point_cloud_ptr = left_point_cloud_;
 
 
                 /// Load whole-sequence detections, but only once!
@@ -365,8 +368,10 @@ namespace SUN {
                         Eigen::Matrix<double, 4, 4> Tr_laser_cam2 = Tr_cam0_cam2 * calibration.getR_rect() * calibration.getTr_velo_cam();
                         left_point_cloud_velodyne_ = SUN::utils::pointcloud::RawLiDARCloudToImageAlignedAndOrganized(velodyne_cloud, Tr_laser_cam2, left_image_, left_camera_);
                     }
+
+                    point_cloud_ptr = left_point_cloud_velodyne_;
                 }
-                point_cloud_ptr = left_point_cloud_velodyne_;
+
 
                 /// Ground-plane
                 bool got_gp = false;
@@ -406,7 +411,7 @@ namespace SUN {
                     snprintf(buff, 500, this->variables_map_["flow_map_path"].as<std::string>().c_str(), current_frame);
                     this->velocity_map_ = cv::imread(buff, CV_LOAD_IMAGE_UNCHANGED);
                     if (this->velocity_map_.data == nullptr) {
-                        sprintf("Error, could not load flow-file: %s\r\n", buff);
+                        printf("Error, could not load flow-file: %s\r\n", buff);
                         return false;
                     }
                 }
