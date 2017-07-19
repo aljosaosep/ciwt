@@ -30,26 +30,15 @@ In order to run the code, your setup has to meet the following minimum requireme
 0.  Run the tracker eg. `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d`
 0.  Find a small sample of KITTI tracking dataset in `%PROJ_DIR%/data/kitti_sample` (left/right camera images, Regionlets detections, calibration files).
 
-## Citing
-
-If you find the tracker useful in your research, please consider citing:
-
-    @inproceedings{Osep17ICRA,
-      title={Combined Image- and World-Space Tracking in Traffic Scenes},
-      author={O\v{s}ep, Aljo\v{s}a and Mehner, Wolfgang and Mathias, Markus and Leibe, Bastian},
-      booktitle={ICRA},
-      year={2017}
-    }
-
 ## Remarks
 
 * Tracking modes
     * There are two tracking modes, `detection` and `detection_shape` (set via `--tracking_mode`, or set in the config)
-    * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), `detection_shape` provides significantly more precise localization in the 3D space.
+    * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), `detection_shape` provides significantly more precise localization in the 3D space while the `detection` mode is faster.
 
 * Data preprocessing
-    * Tracker needs disparity maps to run, `detection_shape` additionally requires 3D segments (generic object proposals).
-    * When you run tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time.
+    * The tracker requires disparity maps to run, `detection_shape` additionally requires 3D segments (eg. generic object proposals, shipped with the tracker).
+    * When you run the tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time.
 
 * External libraries
     * Tracker ships the following external modules:
@@ -61,6 +50,17 @@ If you find the tracker useful in your research, please consider citing:
     * In paper experiments, we additionally used scene-flow to obtain velocity estimates of the 3D segments. You can input to the tracker velocity maps via `--flow_map_path`, but it is not necessary. Tracker will work just fine without it.
 
 * Run the tracker in `release` mode (oterwise it will be slow).
+
+## Citing
+
+If you find the tracker useful in your research, please consider citing:
+
+    @inproceedings{Osep17ICRA,
+      title={Combined Image- and World-Space Tracking in Traffic Scenes},
+      author={O\v{s}ep, Aljo\v{s}a and Mehner, Wolfgang and Mathias, Markus and Leibe, Bastian},
+      booktitle={ICRA},
+      year={2017}
+    }
 
 ## License
 
