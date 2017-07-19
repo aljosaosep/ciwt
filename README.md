@@ -17,9 +17,14 @@ In order to run the code, your setup has to meet the following minimum requireme
   * PCL (1.8.x)
 
 ## Install
+
+### Compiling the code using CMake
 0.  `mkdir build`
 0.  `cmake ..`
 0.  `make all`
+
+### Running the tracker
+0.  `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d
 
 ## Citing
 
