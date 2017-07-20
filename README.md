@@ -41,15 +41,18 @@ In order to run the code, your setup has to meet the following minimum requireme
     * When you run the tracker for the first time, both will be computed on-the-fly, which will significantly slow-down the proc. time.
 
 * External libraries
-    * Tracker ships the following external modules:
+    * The tracker ships the following external modules:
         * **libelas** - disparity estimation (http://www.cvlibs.net/software/libelas/)
         * **libviso2** - egomotion estimation (http://www.cvlibs.net/software/libviso/)
 
 * Etc
-    * Tracker does not ship scene-flow estimator.
-    * In paper experiments, we additionally used scene-flow to obtain velocity estimates of the 3D segments. You can input to the tracker velocity maps via `--flow_map_path`, but it is not necessary. Tracker will work just fine without it.
+    * The tracking framework does not ship a scene-flow estimator (you can get one here https://github.com/vogechri/PRSM)
+    * In the paper experiments, we additionally used a scene-flow estimator to obtain velocity estimates of the 3D segments. You can input to the tracker velocity maps via `--flow_map_path`, but it is not necessary. Tracker will work just fine without it.
+
 
 * Run the tracker in `release` mode (oterwise it will be slow).
+
+If you have any issues or questions about the code, please contact me https://www.vision.rwth-aachen.de/person/13/
 
 ## Citing
 
