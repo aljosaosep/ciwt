@@ -3,9 +3,11 @@ project(GOT)
 
 # Build Options
 option(SHOW_PATH "Show path of libs and headers" OFF)
-set(LOCAL_PREFIX "/home/osep/local/" CACHE PATH "Path to local installations e.g. USER/local/")
-set(RPATH "/home/osep/local/lib/" CACHE PATH "Path to local libraries e.g. USER/local/lib/")
+#set(LOCAL_PREFIX "/home/osep/local/" CACHE PATH "Path to local installations e.g. USER/local/")
+#set(RPATH "/home/osep/local/lib/" CACHE PATH "Path to local libraries e.g. USER/local/lib/")
 set(OpenCV_DIR "/home/osep/local/share/OpenCV" CACHE PATH "Path to local OpenCV e.g. USER/local/share/OpenCV")
+set(PCL_DIR "/path/to/PCLConfig.cmake" CACHE PATH "Path to local PCL e.g. USER/local/share/pcl-1.8")
+set(EIGEN_INCLUDE_DIRS "/path/to/include/eige3" CACHE PATH "Path to local eigen/include e.g. USER/local/include/eigen3")
 
 # Compiler Flags
 set(CMAKE_CXX_COMPILER_FLAGS "${CMAKE_CXX_COMPILER_FLAGS} -Wall") # Enables all compiler warnings
@@ -17,23 +19,22 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_DEBUG})
 set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
 
-# Explicitly set path to flann library, make sure to put this before pcl part
-set(Boost_LIBS
-        "${LOCAL_PREFIX}/lib/libboost_program_options.so"
-        "${LOCAL_PREFIX}/lib/libboost_thread.so"
-        "${LOCAL_PREFIX}/lib/libboost_system.so"
-        "${LOCAL_PREFIX}/lib/libboost_signals.so"
-        "${LOCAL_PREFIX}/lib/libboost_log.so"
-        )
+#set(Boost_LIBS
+#        "${LOCAL_PREFIX}/lib/libboost_program_options.so"
+#        "${LOCAL_PREFIX}/lib/libboost_thread.so"
+#        "${LOCAL_PREFIX}/lib/libboost_system.so"
+#        "${LOCAL_PREFIX}/lib/libboost_signals.so"
+#        "${LOCAL_PREFIX}/lib/libboost_log.so"
+#        )
 
 # Here we set *_LIBS, *_INCLUDE_DIRS, etc
-find_package(OpenCV 3.1.0 REQUIRED COMPONENTS core highgui imgproc calib3d video)
+#find_package(OpenCV 3.1.0 REQUIRED COMPONENTS core highgui imgproc calib3d video)
+find_package(Boost COMPONENTS program_options thread system signals) 
+find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc calib3d video)
 find_package(PCL 1.8.0 REQUIRED COMPONENTS common io visualization filters sample_consensus segmentation kdtree)
 
 # Include
-include_directories(include ${PROJECT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
-
-#add_definitions(${PCL_DEFINITIONS})
+include_directories(include ${PROJECT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 
 # Project src
 file(GLOB PROJ_SRC_FILES ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -156,13 +157,13 @@ add_subdirectory(apps)
 add_subdirectory(experimental)
 
 message(STATUS "Boost_LIBRARIES: " ${Boost_LIBRARIES})
-message(STATUS "Boost libs: " ${Boost_LIBS})
+#message(STATUS "Boost libs: " ${Boost_LIBS})
 message(STATUS "PCL libs: " ${PCL_LIBRARIES})
 
 # Debug info
 if(SHOW_PATH)
     message(STATUS "Boost_LIBRARIES: " ${Boost_LIBRARIES})
-    message(STATUS "Boost libs: " ${Boost_LIBS})
+    #message(STATUS "Boost libs: " ${Boost_LIBS})
     message(STATUS ${OpenCV_LIBS})
     message(STATUS "Project Source Dirs: " ${PROJECT_SOURCE_DIR})
     message(STATUS "OpenCV Include Dirs: " ${OpenCV_INCLUDE_DIRS})
