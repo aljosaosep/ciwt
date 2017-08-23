@@ -18,6 +18,8 @@ In order to run the code, your setup has to meet the following minimum requireme
   * OpenCV (3.2.0 + OpenCV contrib)
   * PCL (1.8.x)
 
+In case these are not installed on your system (eg. you have installed your libs to some weird directory such as /home/DOG/local) you need to set manually OpenCV_DIR, PCL_DIR, EIGEN_INCLUDE_DIRS by editing CMakeCache.txt.
+
 ## Install
 
 ### Compiling the code using CMake
