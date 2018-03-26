@@ -5,8 +5,10 @@ This repository contains code for the tracking system as described in
 
 By Aljosa Osep, Wolfgang Mehner, Markus Mathias, Bastian Leibe at Computer Vision Group, RWTH Aachen University
 
+![Alt text](image/cover.png?raw=true "Our method.")
+
 ## Demo  Video
-TODO
+[Click here to watch the video](https://youtu.be/TCdgUI5Xmus).
 
 ## Prerequisite
 
