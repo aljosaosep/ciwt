@@ -254,7 +254,7 @@ namespace CIWTApp {
             po::options_description generic_options("Command line options:");
             generic_options.add_options()
                     ("help", "Produce help message")
-                    ("config", po::value<std::string>(&config_file)->required(), "Config file path.")
+                    ("config", po::value<std::string>(&config_file), "Config file path.")
                     ("config_parameters", po::value<std::string>(&config_parameters_file), "Config file path (parameters only!).")
                     ("show_visualization_3d", po::bool_switch(&show_visualization_3d)->default_value(false), "Show 3D visualization.")
                     ("show_visualization_2d", po::bool_switch(&show_visualization_2d)->default_value(false), "Show 2D visualization.")

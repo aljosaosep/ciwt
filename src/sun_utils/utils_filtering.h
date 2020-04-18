@@ -55,7 +55,7 @@ namespace SUN {
                * @param[in] only_color_outlier_points
                * @author Aljosa (osep@vision.rwth-aachen.de)
                */
-            pcl::PointCloud<pcl::Normal>::Ptr FilterPointCloudBasedOnNormalEstimation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_to_be_cleaned, bool only_color_outlier_points=false);
+            // pcl::PointCloud<pcl::Normal>::Ptr FilterPointCloudBasedOnNormalEstimation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_to_be_cleaned, bool only_color_outlier_points=false);
 
 
             /**

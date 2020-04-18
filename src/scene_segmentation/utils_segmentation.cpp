@@ -21,9 +21,9 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 
 #include <scene_segmentation/utils_segmentation.h>
 
-// boost
-#include <boost/archive/binary_oarchive.hpp>
-#include <boost/archive/binary_iarchive.hpp>
+//// boost
+//#include <boost/archive/binary_oarchive.hpp>
+//#include <boost/archive/binary_iarchive.hpp>
 
 // utils
 #include "utils_observations.h"
@@ -253,35 +253,35 @@ namespace GOT {
             }
 
             bool SaveObjectProposals(const char *filename, const std::vector<ObjectProposal> &proposals) {
-                std::ofstream ofs(filename);
-                if (!ofs.is_open())
-                    return false;
-                //boost::archive::text_oarchive oa(ofs);
-                boost::archive::binary_oarchive oa(ofs);
-                int num_proposals = proposals.size();
-                oa << num_proposals;
-                for (const auto &proposal:proposals) {
-                    oa << proposal;
-                }
-                ofs.close();
-
-                return true;
+//                std::ofstream ofs(filename);
+//                if (!ofs.is_open())
+//                    return false;
+//                //boost::archive::text_oarchive oa(ofs);
+//                boost::archive::binary_oarchive oa(ofs);
+//                int num_proposals = proposals.size();
+//                oa << num_proposals;
+//                for (const auto &proposal:proposals) {
+//                    oa << proposal;
+//                }
+//                ofs.close();
+//
+//                return true;
             }
 
             bool LoadObjectProposals(const char *filename, std::vector<ObjectProposal> &proposals) {
-                proposals.clear();
-                std::ifstream ifs(filename);
-                if (!ifs.is_open())
-                    return false;
-                boost::archive::binary_iarchive ia(ifs); //text_iarchive ia(ifs);
-                int num_proposals=0;
-                ia >> num_proposals;
-                for (int i=0; i<num_proposals; i++) {
-                    GOT::segmentation::ObjectProposal proposal;
-                    ia >> proposal;
-                    proposals.push_back(proposal);
-                }
-                return true;
+//                proposals.clear();
+//                std::ifstream ifs(filename);
+//                if (!ifs.is_open())
+//                    return false;
+//                boost::archive::binary_iarchive ia(ifs); //text_iarchive ia(ifs);
+//                int num_proposals=0;
+//                ia >> num_proposals;
+//                for (int i=0; i<num_proposals; i++) {
+//                    GOT::segmentation::ObjectProposal proposal;
+//                    ia >> proposal;
+//                    proposals.push_back(proposal);
+//                }
+//                return true;
             }
 
             std::vector<int> ComputeGroundPlaneIndicesFromPointCloudIndices(pcl::PointCloud<pcl::PointXYZRGBA>::ConstPtr scene_cloud, const SUN::utils::Camera &camera, const std::vector<int> &pointcloud_inds, const GOT::segmentation::GroundHistogram &ground_hist) {

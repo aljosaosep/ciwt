@@ -131,7 +131,7 @@ namespace SUN {
                 histogram_out.setZero(hist_size);
 
                 cv::Mat image_LAB;
-                cv::cvtColor(image, image_LAB, CV_BGR2Lab);
+                cv::cvtColor(image, image_LAB, cv::COLOR_BGR2Lab);
 
                 auto compute_hist_for_block = [&image_LAB](const cv::Rect &crop, int start_index, int num_bins, Eigen::VectorXd &hist) {
                     // Loop through block

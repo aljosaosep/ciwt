@@ -32,6 +32,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include <iostream>
 #include <fstream>
 #include <math.h>
+#include <vector>
 
 namespace SUN {
     namespace utils {

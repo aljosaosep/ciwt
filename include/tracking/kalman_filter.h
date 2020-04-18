@@ -24,6 +24,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 
 // std
 #include <memory>
+#include <vector>
 
 // Eigen
 #include <Eigen/Core>

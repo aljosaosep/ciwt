@@ -132,7 +132,7 @@ namespace GOT {
         }
 
         void Observation::set_pointcloud_indices(const std::vector<int> &indices, int image_width, int image_height) {
-            compressed_mask_ = SUN::shared_types::CompressedMask(indices, image_width, image_height);
+            //compressed_mask_ = SUN::shared_types::CompressedMask(indices, image_width, image_height);
             cached_indices_ = indices;
         }
 
@@ -174,8 +174,8 @@ namespace GOT {
             return orientation_;
         }
 
-        const SUN::shared_types::CompressedMask &Observation::compressed_mask() const {
-            return this->compressed_mask_;
-        }
+//        const SUN::shared_types::CompressedMask &Observation::compressed_mask() const {
+//            return this->compressed_mask_;
+//        }
     }
 }

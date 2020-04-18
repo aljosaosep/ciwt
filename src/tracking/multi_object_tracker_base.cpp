@@ -21,6 +21,9 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 
 #include <tracking/multi_object_tracker_base.h>
 
+// boost
+#include <boost/program_options/variables_map.hpp>
+
 // utils
 #include "utils_bounding_box.h"
 #include "ground_model.h"

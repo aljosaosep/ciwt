@@ -240,7 +240,7 @@ namespace GOT {
                                                                                      plane_min_dist, plane_max_dist, false); // Remove ground-plane points, far-away points
 
 
-                SUN::utils::filter::FilterPointCloudBasedOnNormalEstimation(cloud_to_process, false); // Normal-based cleaning
+                //SUN::utils::filter::FilterPointCloudBasedOnNormalEstimation(cloud_to_process, false); // Normal-based cleaning
 
 
 

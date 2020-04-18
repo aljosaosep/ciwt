@@ -1,52 +1,54 @@
-cmake_minimum_required(VERSION 2.8.6)
-project(GOT)
+cmake_minimum_required(VERSION 3.10)
+project(ciwt)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Build Options
-option(SHOW_PATH "Show path of libs and headers" OFF)
-set(LOCAL_PREFIX "/home/osep/local/" CACHE PATH "Path to local installations e.g. USER/local/")
-set(OpenCV_DIR "/home/osep/local/share/OpenCV" CACHE PATH "Path to local OpenCV e.g. USER/local/share/OpenCV")
-set(PCL_DIR "/path/to/PCLConfig.cmake" CACHE PATH "Path to local PCL e.g. USER/local/share/pcl-1.8")
-set(EIGEN_INCLUDE_DIRS "/path/to/include/eige3" CACHE PATH "Path to local eigen/include e.g. USER/local/include/eigen3")
+option(SHOW_PATH "Show path of libs and headers" ON)
+set(LOCAL_PREFIX "/usr/wiss/aljosa/local/" CACHE PATH "Path to local installations e.g. USER/local/")
+set(OpenCV_DIR "/usr/wiss/aljosa/local/share/opencv4" CACHE PATH "Path to local OpenCV e.g. USER/local/share/OpenCV")
+set(PCL_DIR "/usr/wiss/aljosa/local/share/pcl-1.9/PCLConfig.cmake" CACHE PATH "Path to local PCL e.g. USER/local/share/pcl-1.x")
+set(BOOST_ROOT "/usr/wiss/aljosa/local/lib" CACHE PATH "Boost root dir")
 
 
 # Compiler Flags
 set(CMAKE_CXX_COMPILER_FLAGS "${CMAKE_CXX_COMPILER_FLAGS} -Wall") # Enables all compiler warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")  # Generate position independent code
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")  # Enable c++11
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")  # Enable c++11
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 set(CMAKE_CXX_FLAGS_DEBUG ${CMAKE_CXX_FLAGS_DEBUG})
 set(CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
 
-set(Boost_LIBS
-        "${LOCAL_PREFIX}/lib/libboost_program_options.so"
-        "${LOCAL_PREFIX}/lib/libboost_thread.so"
-        "${LOCAL_PREFIX}/lib/libboost_system.so"
-        "${LOCAL_PREFIX}/lib/libboost_signals.so"
-        "${LOCAL_PREFIX}/lib/libboost_log.so"
-        )
-
 # Here we set *_LIBS, *_INCLUDE_DIRS, etc
-#find_package(OpenCV 3.1.0 REQUIRED COMPONENTS core highgui imgproc calib3d video)
-# find_package(Boost 1.61.0 REQUIRED COMPONENTS program_options thread system signals)
+find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc)
+find_package(PCL 1.9.0 REQUIRED COMPONENTS common io visualization filters sample_consensus segmentation kdtree)
+#link_directories(${PCL_LIBRARY_DIRS})
 
-find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc calib3d video)
-find_package(PCL 1.8.0 REQUIRED COMPONENTS common io visualization filters sample_consensus segmentation kdtree)
+set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost 1.55 COMPONENTS program_options thread system serialization REQUIRED)
 
-# Include
-include_directories(include ${PROJECT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS})
+    link_directories(${Boost_LIBRARY_DIR})
+    message(STATUS "Boost found!" ${Boost_LIBRARIES})
+endif()
 
-# Project src
+include_directories(include ${PROJECT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS})
+
+# Include own files
 file(GLOB PROJ_SRC_FILES ${CMAKE_SOURCE_DIR}/src/*.cpp)
 include_directories(${CMAKE_SOURCE_DIR}/src)
 
-# External code
 file(GLOB EXTERNAL_SRC_FILES ${CMAKE_SOURCE_DIR}/src/external/*.cpp)
 set(EXTERNAL_SRC_DIR ${CMAKE_SOURCE_DIR}/src/external)
 include_directories(${EXTERNAL_SRC_DIR})
 
-# Utils
 file(GLOB SUN_UTILS_SRC_FILES ${CMAKE_SOURCE_DIR}/src/sun_utils/*.cpp)
 set(SUN_UTILS_SRC_DIR ${CMAKE_SOURCE_DIR}/src/sun_utils)
 include_directories(${SUN_UTILS_SRC_DIR})
@@ -55,12 +57,6 @@ include_directories(${SUN_UTILS_SRC_DIR})
 file(GLOB CIWT_SRC_FILES ${CMAKE_SOURCE_DIR}/src/CIWT/*.cpp)
 set(CIWT_SRC_DIR ${CMAKE_SOURCE_DIR}/src/CIWT)
 include_directories(${CIWT_SRC_DIR})
-
-find_package(OpenMP)
-if (OPENMP_FOUND)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-    message(STATUS "Use OpenMP")
-endif()
 
 # Libraries
 add_library (connected_components
@@ -158,7 +154,7 @@ add_subdirectory(apps)
 add_subdirectory(experimental)
 
 #message(STATUS "Boost_LIBRARIES: " ${Boost_LIBRARIES})
-message(STATUS "Boost libs: " ${Boost_LIBS})
+#message(STATUS "Boost libs: " ${Boost_LIBS})
 message(STATUS "PCL libs: " ${PCL_LIBRARIES})
 
 # Debug info

@@ -46,19 +46,19 @@ namespace SUN {
     namespace utils {
 
         class Detection {
-            //! For serialization.
-            friend class boost::serialization::access;
-
-            template<class Archive>
-            void serialize(Archive &ar, const unsigned int version) {
-                ar & category_;
-                ar & id_;
-                ar & score_;
-                ar & footpoint_;
-                ar & bounding_box_2d_;
-                ar & bounding_box_3d_;
-                ar & pose_covariance_matrix_;
-            }
+//            //! For serialization.
+//            friend class boost::serialization::access;
+//
+//            template<class Archive>
+//            void serialize(Archive &ar, const unsigned int version) {
+//                ar & category_;
+//                ar & id_;
+//                ar & score_;
+//                ar & footpoint_;
+//                ar & bounding_box_2d_;
+//                ar & bounding_box_3d_;
+//                ar & pose_covariance_matrix_;
+//            }
 
         public:
             Detection();

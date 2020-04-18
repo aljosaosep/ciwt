@@ -24,10 +24,13 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 
 // std
 #include <memory>
+#include <vector>
 
 // Eigen
 #include <Eigen/Core>
 #include <src/sun_utils/shared_types.h>
+
+
 
 // Forward decl.
 namespace SUN { namespace shared_types { enum CategoryTypeKITTI; }}
@@ -54,7 +57,7 @@ namespace GOT {
             const double orientation() const;
             double score() const;
 
-            const SUN::shared_types::CompressedMask &compressed_mask() const;
+            //const SUN::shared_types::CompressedMask &compressed_mask() const;
 
             // Setters
             void set_score(double score);
@@ -92,7 +95,7 @@ namespace GOT {
             bool proposal_3d_avalible_;
 
             std::vector<int> cached_indices_;
-            SUN::shared_types::CompressedMask compressed_mask_;
+            //SUN::shared_types::CompressedMask compressed_mask_;
         };
 
         std::string GetCategoryString(SUN::shared_types::CategoryTypeKITTI type);

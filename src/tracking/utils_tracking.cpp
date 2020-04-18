@@ -42,8 +42,8 @@ namespace GOT {
 
             Eigen::Matrix4d EstimateEgomotion(libviso2::VisualOdometryStereo &viso, const cv::Mat &color_left, const cv::Mat &color_right) {
                 cv::Mat grayscale_left, grayscale_right;
-                cv::cvtColor(color_left, grayscale_left, CV_BGR2GRAY);
-                cv::cvtColor(color_right, grayscale_right, CV_BGR2GRAY);
+                cv::cvtColor(color_left, grayscale_left, cv::COLOR_BGR2GRAY);
+                cv::cvtColor(color_right, grayscale_right, cv::COLOR_BGR2GRAY);
                 const int32_t width = color_left.cols;
                 const int32_t height = color_left.rows;
 

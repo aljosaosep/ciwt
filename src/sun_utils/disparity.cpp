@@ -64,7 +64,7 @@ namespace SUN {
     }
 
     void DisparityMap::ReadDisparityMap(const std::string file_name, unsigned int scaling) {
-        cv::Mat image16 = cv::imread(file_name,CV_LOAD_IMAGE_ANYDEPTH);
+        cv::Mat image16 = cv::imread(file_name,cv::IMREAD_ANYDEPTH);
         disparity_map_ = cv::Mat(image16.rows, image16.cols, CV_32F);
 
         // v = y
@@ -79,13 +79,13 @@ namespace SUN {
     }
 
     void DisparityMap::ReadDisparityMapDaimler(const std::string file_name, unsigned int scaling) {
-        cv::Mat image16 = cv::imread(file_name,CV_LOAD_IMAGE_ANYDEPTH);
+        cv::Mat image16 = cv::imread(file_name, cv::IMREAD_ANYDEPTH);
         disparity_map_ = cv::Mat(image16.rows, image16.cols, CV_32F);
 
         for (int32_t v=0; v<disparity_map_.rows; v++) {
             for (int32_t u=0; u<disparity_map_.cols; u++) {
                 uint16_t val = image16.at<unsigned short>(v,u);
-                if (val == 65535 || val < 0) // We want 0s in disparity map for stixels... but in point-cloud, we want to get rid of these
+                if (val == 65535 || val < 0)
                     SetInvalid(v, u);
                 else
                     SetDisp(v, u, (float) val / scaling);

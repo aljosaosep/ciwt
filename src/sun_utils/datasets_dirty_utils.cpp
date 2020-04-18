@@ -50,8 +50,8 @@ namespace SUN {
                                         SUN::DisparityMap &disparity_left, SUN::DisparityMap &disparity_right) {
 
                 cv::Mat grayscale_left, grayscale_right;
-                cv::cvtColor(image_left, grayscale_left, CV_BGR2GRAY);
-                cv::cvtColor(image_right, grayscale_right, CV_BGR2GRAY);
+                cv::cvtColor(image_left, grayscale_left, cv::COLOR_BGR2GRAY);
+                cv::cvtColor(image_right, grayscale_right, cv::COLOR_BGR2GRAY);
 
                 // get image width and height
                 int32_t width  = grayscale_left.cols;
@@ -111,7 +111,7 @@ namespace SUN {
                 GetDetectionsForSpecificFrameKitti(current_frame, detections_all_frames, detections);
 
                 /// Non-max-supp
-                detections = SUN::utils::detection::NonMaximaSuppression(detections, variables_map["detection_nms_iou"].as<double>());
+                //detections = SUN::utils::detection::NonMaximaSuppression(detections, variables_map.at("detection_nms_iou").as<double>());
 
                 /// Threshold
                 auto f_filt = [](const Detection &detection, const po::variables_map &variables_map)->bool {
@@ -290,7 +290,7 @@ namespace SUN {
                 }
 
                 /// Image data
-                left_image_ = cv::imread(left_image_path_buff, CV_LOAD_IMAGE_COLOR);
+                left_image_ = cv::imread(left_image_path_buff, cv::IMREAD_COLOR);
                 if (left_image_.data == nullptr) {
                     printf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
                     return false;
@@ -309,7 +309,7 @@ namespace SUN {
                 if (this->variables_map_.count("right_image_path")) {
                     char right_image_path_buff[MAX_PATH_LEN];
                     snprintf(right_image_path_buff, MAX_PATH_LEN, this->variables_map_["right_image_path"].as<std::string>().c_str(), current_frame);
-                    right_image_ = cv::imread(right_image_path_buff, CV_LOAD_IMAGE_COLOR);
+                    right_image_ = cv::imread(right_image_path_buff, cv::IMREAD_COLOR);
 
                     if (right_image_.data == nullptr) {
                         printf("DatasetAssitantDirty error: could not load image: %s\r\n", left_image_path_buff);
@@ -409,7 +409,7 @@ namespace SUN {
                 if (this->variables_map_.count("flow_map_path")) {
                     char buff[500];
                     snprintf(buff, 500, this->variables_map_["flow_map_path"].as<std::string>().c_str(), current_frame);
-                    this->velocity_map_ = cv::imread(buff, CV_LOAD_IMAGE_UNCHANGED);
+                    this->velocity_map_ = cv::imread(buff, cv::IMREAD_UNCHANGED);
                     if (this->velocity_map_.data == nullptr) {
                         printf("Error, could not load flow-file: %s\r\n", buff);
                         return false;

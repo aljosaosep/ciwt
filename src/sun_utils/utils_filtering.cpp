@@ -21,7 +21,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include "utils_filtering.h"
 
 // pcl
-#include <pcl/features/integral_image_normal.h>
+//#include <pcl/features/integral_image_normal.h>
 
 // utils
 #include "ground_model.h"
@@ -101,43 +101,43 @@ namespace SUN {
                 }
             }
 
-            pcl::PointCloud<pcl::Normal>::Ptr FilterPointCloudBasedOnNormalEstimation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_to_be_cleaned, bool only_color_outlier_points) {
-                // Estimate normals
-                pcl::PointCloud<pcl::Normal>::Ptr normals_cloud (new pcl::PointCloud<pcl::Normal>);
-                pcl::IntegralImageNormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
-                ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
-                ne.setMaxDepthChangeFactor(0.02f);
-                ne.setNormalSmoothingSize(10.0f);
-                ne.setInputCloud(cloud_to_be_cleaned);
-                ne.compute(*normals_cloud);
-                normals_cloud->width = cloud_to_be_cleaned->width;
-                normals_cloud->height = cloud_to_be_cleaned->height;
-
-                // Set points, for which normal estimation failed, to NaN
-                for (int i=0; i<cloud_to_be_cleaned->width; i++) {
-                    for (int j=0; j<cloud_to_be_cleaned->height; j++) {
-                        pcl::PointXYZRGBA &p = cloud_to_be_cleaned->at(i,j);
-                        const pcl::Normal &n = normals_cloud->at(i,j);
-                        if (std::isnan (p.x) || std::isnan (p.y) || std::isnan (p.z))
-                            continue;
-                        if (std::isnan (n.normal_x) || std::isnan (n.normal_y) || std::isnan (n.normal_z)) {
-                            if (only_color_outlier_points) {
-                                // p.rgb = GOT::utils::pointcloud::PackRgbValuesToUint32(255, 0,0 );
-                                p.r = static_cast<uint8_t>(255);
-                                p.g = static_cast<uint8_t>(0);
-                                p.b = static_cast<uint8_t>(0);
-                                p.a = static_cast<uint8_t>(255);
-                            }
-                            else {
-                                p.x = p.y = p.z = std::numeric_limits<float>::quiet_NaN();
-                                p.r = p.g = p.b = p.a = std::numeric_limits<uint8_t>::quiet_NaN();
-                            }
-                        }
-                    }
-                }
-
-                return normals_cloud;
-            }
+//            pcl::PointCloud<pcl::Normal>::Ptr FilterPointCloudBasedOnNormalEstimation(pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud_to_be_cleaned, bool only_color_outlier_points) {
+//                // Estimate normals
+//                pcl::PointCloud<pcl::Normal>::Ptr normals_cloud (new pcl::PointCloud<pcl::Normal>);
+//                pcl::IntegralImageNormalEstimation<pcl::PointXYZRGBA, pcl::Normal> ne;
+//                ne.setNormalEstimationMethod (ne.AVERAGE_3D_GRADIENT);
+//                ne.setMaxDepthChangeFactor(0.02f);
+//                ne.setNormalSmoothingSize(10.0f);
+//                ne.setInputCloud(cloud_to_be_cleaned);
+//                ne.compute(*normals_cloud);
+//                normals_cloud->width = cloud_to_be_cleaned->width;
+//                normals_cloud->height = cloud_to_be_cleaned->height;
+//
+//                // Set points, for which normal estimation failed, to NaN
+//                for (int i=0; i<cloud_to_be_cleaned->width; i++) {
+//                    for (int j=0; j<cloud_to_be_cleaned->height; j++) {
+//                        pcl::PointXYZRGBA &p = cloud_to_be_cleaned->at(i,j);
+//                        const pcl::Normal &n = normals_cloud->at(i,j);
+//                        if (std::isnan (p.x) || std::isnan (p.y) || std::isnan (p.z))
+//                            continue;
+//                        if (std::isnan (n.normal_x) || std::isnan (n.normal_y) || std::isnan (n.normal_z)) {
+//                            if (only_color_outlier_points) {
+//                                // p.rgb = GOT::utils::pointcloud::PackRgbValuesToUint32(255, 0,0 );
+//                                p.r = static_cast<uint8_t>(255);
+//                                p.g = static_cast<uint8_t>(0);
+//                                p.b = static_cast<uint8_t>(0);
+//                                p.a = static_cast<uint8_t>(255);
+//                            }
+//                            else {
+//                                p.x = p.y = p.z = std::numeric_limits<float>::quiet_NaN();
+//                                p.r = p.g = p.b = p.a = std::numeric_limits<uint8_t>::quiet_NaN();
+//                            }
+//                        }
+//                    }
+//                }
+//
+//                return normals_cloud;
+//            }
         }
     }
 }
