@@ -14,11 +14,12 @@ By Aljosa Osep, Wolfgang Mehner, Markus Mathias, Bastian Leibe at Computer Visio
 
 In order to run the code, your setup has to meet the following minimum requirements (tested versions in parentheses. Other versions might work, too):
 
-* GCC 4.8.4
+Below is my latest configurtion (other versions should work too):
+* GCC 7.5.0
   * Eigen (3.x)
-  * Boost (1.55 or later)
-  * OpenCV (3.2.0 + OpenCV contrib)
-  * PCL (1.8.x)
+  * Boost (1.7.1 or later)
+  * OpenCV (4.0)
+  * PCL (1.9.x) (note: depends also on VTK (tested 8.2) and flann)
 
 In case these are not installed on your system (eg. you have installed your libs to some weird directory such as /home/DOG/local) you need to set manually OpenCV_DIR, PCL_DIR, EIGEN_INCLUDE_DIRS by editing CMakeCache.txt.
 
@@ -58,6 +59,12 @@ In case these are not installed on your system (eg. you have installed your libs
 
 If you have any issues or questions about the code, please contact me https://www.vision.rwth-aachen.de/person/13/
 
+## Possible issues
+
+* Your code crashses, reporting Eigen alignment related issues?
+	- Easy fix: recompile pcl library, disable SSE ``--DPCL_ENABLE_SSE=0``
+	- Slightly less easy fix: fix eigen alignment related issues in my code and win yourself a beer or several (https://eigen.tuxfamily.org/dox/group__DenseMatrixManipulation__Alignement.html
+https://eigen.tuxfamily.org/dox/TopicPitfalls.html)
 ## Citing
 
 If you find the tracker useful in your research, please consider citing:
