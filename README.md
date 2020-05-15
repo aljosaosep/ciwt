@@ -41,6 +41,7 @@ You can get 2D (DPM, Regionlets) and 3D (3DOP) detections for the training set [
 * Tracking modes
     * There are two tracking modes, `detection` and `detection_shape` (set via `--tracking_mode`, or set in the config)
     * They perform similarly when evaluating MOTA in image-domain (KITTI eval. protocol), `detection_shape` provides significantly more precise localization in the 3D space while the `detection` mode is faster.
+    * 2020 update: `detection_shape` mode should be considered obsolete (we have awesome 3D detectors nowadays), but is still there for evaluation purposes.
 
 * Data preprocessing
     * The tracker requires disparity maps to run, `detection_shape` additionally requires 3D segments (eg. generic object proposals, shipped with the tracker).
