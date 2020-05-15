@@ -35,6 +35,9 @@ In case these are not installed on your system (eg. you have installed your libs
 0.  Run the tracker eg. `CIWTApp --config %PROJ_DIR%/data/kitti_sample.cfg --start_frame 0 --end_frame 15 --show_visualization_2d --show_visualization_3d`
 0.  Find a small sample of KITTI tracking dataset in `%PROJ_DIR%/data/kitti_sample` (left/right camera images, Regionlets detections, calibration files).
 
+### Object Detection
+You will need object detections to run your tracker (either 2D or 3D). 
+You can get 2D (DPM, Regionlets) and 3D (3DOP) detections for the training set [here](https://drive.google.com/open?id=14SqktBjQ4GAHnnZ-c4BPNis5B8Ncisf_)
 ## Remarks
 
 * Tracking modes
