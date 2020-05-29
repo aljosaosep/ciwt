@@ -82,131 +82,6 @@ namespace SUN {
             }
 
 
-            std::vector<SUN::utils::Detection> GetDetectionsKITTI(int current_frame,
-                                                                  const SUN::utils::Camera &left_camera,
-                                                                  const SUN::utils::Camera &right_camera,
-                                                                  const po::variables_map &variables_map,
-                                                                  const std::vector<SUN::utils::KITTI::TrackingLabel> &detections_all_frames) {
-
-                auto GetDetectionsForSpecificFrameKitti = [](const int frame,
-                                                             const std::vector<SUN::utils::KITTI::TrackingLabel> &labels,
-                                                             std::vector<SUN::utils::Detection> &detections_out) {
-                    detections_out.clear();
-                    for (auto &label : labels) {
-                        if (label.frame == frame) {
-                            SUN::utils::Detection det;
-                            Eigen::Vector4d bbox_2d;
-                            bbox_2d << label.boundingBox2D[0], label.boundingBox2D[1], label.boundingBox2D[2] - label.boundingBox2D[0],
-                                    label.boundingBox2D[3] - label.boundingBox2D[1];
-                            det.set_bounding_box_2d(bbox_2d);
-                            det.set_score(label.score);
-                            det.set_category(static_cast<int>(label.type));
-                            detections_out.push_back(det);
-                        }
-                    }
-                };
-
-                /// Convert KITTI labels to detections
-                std::vector<SUN::utils::Detection> detections;
-                GetDetectionsForSpecificFrameKitti(current_frame, detections_all_frames, detections);
-
-                /// Non-max-supp
-                //detections = SUN::utils::detection::NonMaximaSuppression(detections, variables_map.at("detection_nms_iou").as<double>());
-
-                /// Threshold
-                auto f_filt = [](const Detection &detection, const po::variables_map &variables_map)->bool {
-                    auto det_type = static_cast<SUN::shared_types::CategoryTypeKITTI> (detection.category());
-                    double threshold = 1e2;
-                    if (det_type==SUN::shared_types::CAR)
-                        threshold = variables_map["detection_threshold_car"].as<double>();
-                    else if (det_type==SUN::shared_types::PEDESTRIAN)
-                        threshold = variables_map["detection_threshold_pedestrian"].as<double>();
-                    else if (det_type==SUN::shared_types::CYCLIST)
-                        threshold = variables_map["detection_threshold_cyclist"].as<double>();
-                    return detection.score() >= threshold;
-                };
-
-                /// Filter by det. scores
-                detections = SUN::utils::detection::ScoreFilter(detections, std::bind(f_filt, std::placeholders::_1, variables_map));
-
-                /// SVM score -> quasi-probability (apply sigmoid ... but this is not really a probability!)
-                // TODO softmax would make more sense
-                std::for_each(detections.begin(), detections.end(), [](Detection &det){det.set_score(1.0 / (1.0 + std::exp(-1.0*det.score())));});
-
-                /// Project to 3D
-                detections = SUN::utils::detection::ProjectTo3D(detections, left_camera, right_camera);
-
-                /// Geom. filter
-                detections = SUN::utils::detection::GeometricFilter(detections, left_camera);
-
-                return detections;
-            }
-
-            std::vector<SUN::utils::Detection> GetDetections3DOP(int current_frame, const SUN::utils::Camera &camera, const SUN::utils::KITTI::Calibration &calib, const po::variables_map &variables_map) {
-
-                SUN::utils::KITTI::LabelsIO sun_io;
-                std::vector<SUN::utils::KITTI::TrackingLabel> kitti_detections_precomputed;
-                std::vector<SUN::utils::Detection> detections_out;
-                std::string detections_path = variables_map["detections_path"].as<std::string>();
-
-                // Load 3DOP for this frame
-                char det_buff[500];
-                snprintf(det_buff, 500, detections_path.c_str(), current_frame);
-                sun_io.ReadLabels3DOP(std::string(det_buff), kitti_detections_precomputed);
-
-                // 3DOP detections were already preprocessed, just simply fill the det struct.
-                for (const auto &det_label:kitti_detections_precomputed) {
-                    SUN::utils::Detection det;
-
-                    Eigen::Vector4d pos = Eigen::Vector4d(det_label.location[0], det_label.location[1], det_label.location[2], 1.0);
-                    det.set_score(det_label.score);
-                    det.set_bounding_box_2d(Eigen::Vector4d(det_label.boundingBox2D[0], det_label.boundingBox2D[1],
-                                                            det_label.boundingBox2D[2] - det_label.boundingBox2D[0],
-                                                            det_label.boundingBox2D[3] - det_label.boundingBox2D[1]));
-
-                    det.set_category(SUN::shared_types::CAR); //det_label.type);
-                    det.set_footpoint(pos);
-
-                    // Compute pose covariance
-                    Eigen::Matrix3d detection_cov3d;
-                    SUN::utils::Camera::ComputeMeasurementCovariance3d(pos.head<3>(), 0.5, calib.GetProjCam2(), calib.GetProjCam3(), detection_cov3d);
-                    Eigen::Matrix3d gaussian_prior;
-                    gaussian_prior.setIdentity();
-                    gaussian_prior(0, 0) *= 0.2;
-                    gaussian_prior(2, 2) *= 0.2;
-                    detection_cov3d += gaussian_prior;
-                    det.set_pose_covariance_matrix(detection_cov3d);
-
-                    det.set_observation_angle(det_label.rotationY);
-
-                    Eigen::VectorXd bbox_3d;
-                    bbox_3d.setZero(6);
-                    bbox_3d << det_label.location[0], det_label.location[1], det_label.location[2],
-                            det_label.dimensions[1], det_label.dimensions[0], det_label.dimensions[2]; // Not sure if correct !!!
-
-                    det.set_bounding_box_3d(bbox_3d);
-                    detections_out.push_back(det);
-                }
-
-                return detections_out;
-            }
-
-            auto read_binary_into_cvmat = [](const char *filename, int w, int h, cv::Mat &mat)->bool {
-                float *data = new float[w*h];
-                std::fstream stream(filename, std::ios::in |  std::ios::binary);
-
-                if (!stream.is_open()) {
-                    std::cout << "IO error, could not load: " << filename << std::endl;
-                    return false;
-                }
-
-                stream.read((char*)data, w*h*sizeof(float));
-                mat = cv::Mat(h, w, CV_32FC1, data);
-                stream.close();
-                delete [] data;
-                return true;
-            };
-
             // -------------------------------------------------------------------------------
             // +++ DATASET ASSISTANT IMPLEMENTATION +++
             // -------------------------------------------------------------------------------
@@ -252,6 +127,20 @@ namespace SUN {
                 }
 
                 return true;
+            }
+
+            std::vector<SUN::utils::KITTI::TrackingLabel> ReadDetections(int current_frame,
+                    const po::variables_map &variables_map) {
+
+                SUN::utils::KITTI::LabelsIO sun_io;
+                std::string detections_path = variables_map["detections_path"].as<std::string>();
+
+                char det_buff[500];
+                snprintf(det_buff, 500, detections_path.c_str(), current_frame);
+
+                std::vector<SUN::utils::KITTI::TrackingLabel> detlabels;
+                sun_io.ReadLabels(std::string(det_buff), detlabels);
+                return detlabels;
             }
 
             bool DatasetAssitantDirty::LoadData(int current_frame, const std::string dataset_string) {
@@ -348,13 +237,15 @@ namespace SUN {
 
 
                 /// Load whole-sequence detections, but only once!
-                if (this->variables_map_.count("detections_path")) {
-                    if (this->kitti_detections_full_sequence_.size() <= 0) {
-                        std::cout << "Loading KITTI detections for the whole sequence ..." << std::endl;
-                        SUN::utils::KITTI::LabelsIO sun_io;
-                        sun_io.ReadLabels(this->variables_map_["detections_path"].as<std::string>(), kitti_detections_full_sequence_);
-                    }
-                }
+//                if (this->variables_map_.count("detections_path")) {
+//                    if (this->kitti_detections_full_sequence_.size() <= 0) {
+//                        std::cout << "Loading KITTI detections for the whole sequence ..." << std::endl;
+//                        SUN::utils::KITTI::LabelsIO sun_io;
+//                        sun_io.ReadLabels(this->variables_map_["detections_path"].as<std::string>(), kitti_detections_full_sequence_);
+//                    }
+//                }
+
+                parsed_det_ = ReadDetections(current_frame, variables_map_);
 
                 /// LiDAR
                 // Note: If velodyne scan is missing, don't return false. There are some velodyne scans actually missing in the dataset.
@@ -399,11 +290,12 @@ namespace SUN {
                 left_camera_.set_ground_model(planar_ground_model);
                 right_camera_.set_ground_model(planar_ground_model);
 
-                /// Detections
-                if (this->variables_map_.count("detections_path")) {
-                    object_detections_ = GetDetectionsKITTI(current_frame, left_camera_, right_camera_, variables_map_, this->kitti_detections_full_sequence_);
-                    // object_detections_ = GetDetections3DOP(current_frame, left_camera_, calibration, variables_map_);
-                }
+//                /// Detections
+//                if (this->variables_map_.count("detections_path")) {
+//                    // object_detections_ = GetDetectionsKITTI(current_frame, left_camera_, right_camera_, variables_map_,
+//                    //        this->kitti_detections_full_sequence_);
+//                    object_detections_ = GetDetections3DOP(current_frame, left_camera_, calibration, variables_map_);
+//                }
 
                 /// Velocity estimates (from scene-flow)
                 if (this->variables_map_.count("flow_map_path")) {

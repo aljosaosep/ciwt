@@ -154,77 +154,77 @@ namespace SUN {
 
             }
 
+//            int LabelsIO::ReadLabels(const std::string &filename, std::vector<TrackingLabel> &labels) {
+//                std::ifstream file(filename.c_str(), std::ios::in);
+//                if (file.fail()) {
+//                    std::cout << "Could not read labels file " << filename << std::endl;
+//                    return -1;
+//                }
+//
+//                unsigned int numObjects = 0;
+//
+//                //read line by line
+//                std::string line;
+//                while (getline (file,line)) {
+//                    std::vector<std::string> strings(17); // Each line has 30 space-seperated entries
+//                    boost::split(strings,line,boost::is_any_of(" "));
+//                    TrackingLabel label;
+//                    label.frame = atoi( (strings.at(0)).c_str() );
+//                    label.trackId = atoi( (strings.at(1)).c_str() );
+//                    if (label.trackId+1 > numObjects) {
+//                        numObjects=label.trackId+1;
+//                    }
+//                    std::string type = strings.at(2);
+//                    if (type.compare("Car")==0) {
+//                        label.type = SUN::shared_types::CAR;
+//                    } else if (type.compare("Van")==0) {
+//                        label.type = SUN::shared_types::VAN;
+//                    } else if (type.compare("Truck")==0) {
+//                        label.type = SUN::shared_types::TRUCK;
+//                    } else if (type.compare("Pedestrian")==0) {
+//                        label.type = SUN::shared_types::PEDESTRIAN;
+//                    } else if (type.compare("Person_sitting")==0) {
+//                        label.type = SUN::shared_types::PERSON_SITTING;
+//                    } else if (type.compare("Cyclist")==0) {
+//                        label.type = SUN::shared_types::CYCLIST;
+//                    } else if (type.compare("Tram")==0) {
+//                        label.type = SUN::shared_types::TRAM;
+//                    } else if (type.compare("Misc")==0) {
+//                        label.type = SUN::shared_types::MISC;
+//                    } else if (type.compare("DontCare")==0) {
+//                        label.type = SUN::shared_types::DONT_CARE;
+//                    } else if (type.compare("UNKNOWN")==0) {
+//                        label.type = SUN::shared_types::UNKNOWN_TYPE;
+//                    } else {
+//                        label.type = SUN::shared_types::MISC;
+//                    }
+//                    label.truncated = atof( (strings.at(3)).c_str() );
+//                    label.occluded = static_cast<LabelOcclusion>(atoi( (strings.at(4)).c_str() ));
+//                    label.alpha = atof( (strings.at(5)).c_str() );
+//                    label.boundingBox2D[0] = atof( (strings.at(6)).c_str() );
+//                    label.boundingBox2D[1] = atof( (strings.at(7)).c_str() );
+//                    label.boundingBox2D[2] = atof( (strings.at(8)).c_str() );
+//                    label.boundingBox2D[3] = atof( (strings.at(9)).c_str() );
+//                    label.dimensions[0] = atof( (strings.at(10)).c_str() );
+//                    label.dimensions[1] = atof( (strings.at(11)).c_str() );
+//                    label.dimensions[2] = atof( (strings.at(12)).c_str() );
+//                    label.location[0] = atof( (strings.at(13)).c_str() );
+//                    label.location[1] = atof( (strings.at(14)).c_str() );
+//                    label.location[2] = atof( (strings.at(15)).c_str() );
+//                    label.rotationY = atof( (strings.at(16)).c_str() );
+//
+//                    if (strings.size() >= 18) // This is a bit hacky solution ...
+//                        label.score = atof( (strings.at(17)).c_str() );
+//                    else
+//                        label.score = 0.0;
+//
+//                    labels.push_back(label);
+//                }
+//                return numObjects;
+//            }
+
+
             int LabelsIO::ReadLabels(const std::string &filename, std::vector<TrackingLabel> &labels) {
-                std::ifstream file(filename.c_str(), std::ios::in);
-                if (file.fail()) {
-                    std::cout << "Could not read labels file " << filename << std::endl;
-                    return -1;
-                }
-
-                unsigned int numObjects = 0;
-
-                //read line by line
-                std::string line;
-                while (getline (file,line)) {
-                    std::vector<std::string> strings(17); // Each line has 30 space-seperated entries
-                    boost::split(strings,line,boost::is_any_of(" "));
-                    TrackingLabel label;
-                    label.frame = atoi( (strings.at(0)).c_str() );
-                    label.trackId = atoi( (strings.at(1)).c_str() );
-                    if (label.trackId+1 > numObjects) {
-                        numObjects=label.trackId+1;
-                    }
-                    std::string type = strings.at(2);
-                    if (type.compare("Car")==0) {
-                        label.type = SUN::shared_types::CAR;
-                    } else if (type.compare("Van")==0) {
-                        label.type = SUN::shared_types::VAN;
-                    } else if (type.compare("Truck")==0) {
-                        label.type = SUN::shared_types::TRUCK;
-                    } else if (type.compare("Pedestrian")==0) {
-                        label.type = SUN::shared_types::PEDESTRIAN;
-                    } else if (type.compare("Person_sitting")==0) {
-                        label.type = SUN::shared_types::PERSON_SITTING;
-                    } else if (type.compare("Cyclist")==0) {
-                        label.type = SUN::shared_types::CYCLIST;
-                    } else if (type.compare("Tram")==0) {
-                        label.type = SUN::shared_types::TRAM;
-                    } else if (type.compare("Misc")==0) {
-                        label.type = SUN::shared_types::MISC;
-                    } else if (type.compare("DontCare")==0) {
-                        label.type = SUN::shared_types::DONT_CARE;
-                    } else if (type.compare("UNKNOWN")==0) {
-                        label.type = SUN::shared_types::UNKNOWN_TYPE;
-                    } else {
-                        label.type = SUN::shared_types::MISC;
-                    }
-                    label.truncated = atof( (strings.at(3)).c_str() );
-                    label.occluded = static_cast<LabelOcclusion>(atoi( (strings.at(4)).c_str() ));
-                    label.alpha = atof( (strings.at(5)).c_str() );
-                    label.boundingBox2D[0] = atof( (strings.at(6)).c_str() );
-                    label.boundingBox2D[1] = atof( (strings.at(7)).c_str() );
-                    label.boundingBox2D[2] = atof( (strings.at(8)).c_str() );
-                    label.boundingBox2D[3] = atof( (strings.at(9)).c_str() );
-                    label.dimensions[0] = atof( (strings.at(10)).c_str() );
-                    label.dimensions[1] = atof( (strings.at(11)).c_str() );
-                    label.dimensions[2] = atof( (strings.at(12)).c_str() );
-                    label.location[0] = atof( (strings.at(13)).c_str() );
-                    label.location[1] = atof( (strings.at(14)).c_str() );
-                    label.location[2] = atof( (strings.at(15)).c_str() );
-                    label.rotationY = atof( (strings.at(16)).c_str() );
-
-                    if (strings.size() >= 18) // This is a bit hacky solution ...
-                        label.score = atof( (strings.at(17)).c_str() );
-                    else
-                        label.score = 0.0;
-
-                    labels.push_back(label);
-                }
-                return numObjects;
-            }
-
-
-            int LabelsIO::ReadLabels3DOP(const std::string &filename, std::vector<TrackingLabel> &labels) {
 
                 labels.clear();
 

@@ -35,6 +35,7 @@ namespace CIWTApp {
                 ("detection_threshold_pedestrian", po::value<double>()->default_value(3.5), "Det. threshold: Pedestrian")
                 ("detection_threshold_cyclist", po::value<double>()->default_value(200), "Det. threshold: Cyclist (100, 2)")
                 ("detection_nms_iou", po::value<double>()->default_value(0.6), "Non-maxima-suppression threshold.")
+                ("detection_type", po::value<std::string>()->default_value("2D"), "Detection type: 2D or 3D?")
 
                 ///  --- Object Proposals preproc. ---
                 ("proposals_min_points", po::value<int>()->default_value(100), "Proposals: min num. points.")

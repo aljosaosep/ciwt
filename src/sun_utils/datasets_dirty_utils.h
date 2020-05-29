@@ -92,9 +92,12 @@ namespace SUN {
                 SUN::utils::Camera left_camera_;
                 SUN::utils::Camera right_camera_;
                 double stereo_baseline_;
-                std::vector<SUN::utils::Detection> object_detections_;
-                std::vector<SUN::utils::KITTI::TrackingLabel> kitti_detections_full_sequence_;
+                //std::vector<SUN::utils::Detection> object_detections_;
+                //std::vector<SUN::utils::KITTI::TrackingLabel> kitti_detections_full_sequence_;
                 Eigen::Vector4d ground_plane_;
+                std::vector<SUN::utils::KITTI::TrackingLabel> parsed_det_;
+
+
                 po::variables_map variables_map_;
             };
         }

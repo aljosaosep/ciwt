@@ -89,7 +89,7 @@ namespace SUN {
                 static int ReadLabels(const std::string &filename, std::vector<TrackingLabel> &labels);
 
                 // This parses 3DOP detections in Francis/Joerg format. Duplicate func, so remove when not needed anymore!
-                static int ReadLabels3DOP(const std::string &filename, std::vector<TrackingLabel> &labels);
+                //static int ReadLabels3DOP(const std::string &filename, std::vector<TrackingLabel> &labels);
 
                 /**
                  * @brief ReadLabels

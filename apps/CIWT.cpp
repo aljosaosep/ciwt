@@ -71,6 +71,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include "CIWT/CIWT_tracker.h"
 #include "CIWT/observation_fusion.h"
 #include "CIWT/potential_functions.h"
+#include "CIWT/detection_postproc.h"
 
 #define MAX_PATH_LEN 500
 
@@ -512,7 +513,20 @@ int main(const int argc, const char** argv) {
         const auto &velocity_map = dataset_assistant.velocity_map_;
         left_point_cloud_preprocessed.reset(new PointCloudRGBA);
         pcl::copyPointCloud(*dataset_assistant.left_point_cloud_, *left_point_cloud_preprocessed);
-        std::vector<SUN::utils::Detection> detections_current_frame = dataset_assistant.object_detections_;
+
+        const auto dets_type = variables_map.at("detection_type").as<std::string>();
+        printf("Using dets: %s \r\n", dets_type.c_str());
+        std::vector<SUN::utils::Detection> detections_current_frame;
+        if (dets_type == "2D") {
+            detections_current_frame = ProcDet2D(left_camera, right_camera, dataset_assistant.parsed_det_, variables_map);
+        } else if (dets_type == "3D") {
+            detections_current_frame = ProcDet3D(left_camera, right_camera, dataset_assistant.parsed_det_, variables_map);
+        }
+        else {
+            printf("Invalid detection type: %s \r\n", dets_type);
+            return -1;
+        }
+
 
         // -------------------------------------------------------------------------------
         // +++ Run visual odometry module => estimate egomotion +++
@@ -659,11 +673,13 @@ int main(const int argc, const char** argv) {
         /// Draw observations and tracked objects
         cv::Mat left_image_with_observations = left_image.clone();
         cv::Mat left_image_with_hypos_2d = left_image.clone();
+        cv::Mat left_image_with_hypos_3d = left_image.clone();
         cv::Mat left_image_with_detections = left_image.clone();
 
         if (CIWTApp::debug_level>=2 || CIWTApp::show_visualization_2d) {
             CIWTApp::tracking_visualizer.DrawObservations(observations_all, left_image_with_observations, left_camera, GOT::tracking::draw_observations::DrawObservationAndOrientation);
             CIWTApp::tracking_visualizer.DrawHypotheses(hypos_to_process_further, left_camera, left_image_with_hypos_2d, GOT::tracking::draw_hypos::DrawHypothesis2d);
+            CIWTApp::tracking_visualizer.DrawHypotheses(hypos_to_process_further, left_camera, left_image_with_hypos_3d, GOT::tracking::draw_hypos::DrawHypothesis3d);
         }
 
         if (CIWTApp::show_visualization_2d) {
@@ -681,6 +697,10 @@ int main(const int argc, const char** argv) {
                 // Tracking 2D visualization
                 snprintf(output_path_buff, 500, "%s/hypos_2d_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
                 cv::imwrite(output_path_buff, left_image_with_hypos_2d);
+
+                // Tracking 3D visualization
+                snprintf(output_path_buff, 500, "%s/hypos_3d_%s.png", output_dir_visual_results.c_str(), frame_str_buff);
+                cv::imwrite(output_path_buff, left_image_with_hypos_3d);
             }
         }
 
@@ -691,6 +711,7 @@ int main(const int argc, const char** argv) {
         if (CIWTApp::show_visualization_3d) {
             boost::mutex::scoped_lock updateLock(CIWTApp::visualization_3d_update_mutex);
             CIWTApp::visualization_3d_update_flag = true;
+
 
             pcl::copyPointCloud(*dataset_assistant.left_point_cloud_, *CIWTApp::visualization_3d_point_cloud);
             CIWTApp::visualization_3d_point_cloud->sensor_origin_ = Eigen::Vector4f(0.0,0.0,0.0,1.0);
