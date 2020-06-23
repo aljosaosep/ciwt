@@ -109,6 +109,9 @@ namespace SUN {
                     SUN::utils::Camera::ComputeMeasurementCovariance3d(detection_footpoint.head<3>(), 0.5,
                                                                        left_camera.P().block(0,0,3,4), right_camera.P().block(0,0,3,4),
                                                                        detection_pose_covariance);
+
+
+
                     det.set_footpoint(detection_footpoint);
                     det.set_pose_covariance_matrix(detection_pose_covariance);
                 }

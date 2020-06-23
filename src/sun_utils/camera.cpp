@@ -69,6 +69,12 @@ namespace SUN {
             Eigen::Matrix3d FRTFR = (FR.transpose()*c2d_mat*FR);
             Eigen::Matrix3d sum = FLTFL+FRTFR;
 
+            // Make sure pose cov matrix is well-conditioned
+            Eigen::Matrix3d gaussian_prior;
+            const double prior_fact = 0.05;
+            gaussian_prior << prior_fact, 0.0, 0.0, 0.0, prior_fact, 0.0, 0.0, 0.0, prior_fact;
+            sum += gaussian_prior;
+
             bool invertible;
             double determinant;
             sum.computeInverseAndDetWithCheck(covariance_out, determinant, invertible);
